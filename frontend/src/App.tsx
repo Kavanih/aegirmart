@@ -5,6 +5,7 @@ import { Leaderboard } from "./Leaderboard";
 import { Portfolio } from "./Portfolio";
 import { Accuracy } from "./Accuracy";
 import { MarketDetail } from "./MarketDetail";
+import { BotPage } from "./BotPage";
 import { Sidebar, type View } from "./Sidebar";
 import { ThemeToggle } from "./Theme";
 import { ConnectWallet } from "./wallet/ConnectWallet";
@@ -21,6 +22,7 @@ const HEADING: Record<View, string> = {
   accuracy: "AI Scoreboard",
   leaderboard: "Leaderboard",
   portfolio: "Positions",
+  bot: "Maker bot",
 };
 
 export function App() {
@@ -83,6 +85,7 @@ export function App() {
           {view === "accuracy" && <Accuracy />}
           {view === "leaderboard" && <Leaderboard />}
           {view === "portfolio" && <Portfolio />}
+          {view === "bot" && <BotPage />}
           {view === "swipe" && (
             <>
               <div className="lane-row">

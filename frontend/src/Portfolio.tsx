@@ -133,7 +133,9 @@ export function Portfolio() {
       claimable: claimable.reduce((sum, p) => sum + sharesOf(p) * PAYOUT_PER_SHARE, 0),
       realised: settled.reduce((sum, p) => sum + (p.pnl ?? 0), 0),
       staked: rows.reduce((sum, p) => sum + (p.cost ?? 0), 0),
-      atRisk: rows.filter((p) => outcomeOf(p) === "open").reduce((sum, p) => sum + p.size * PAYOUT_PER_SHARE, 0),
+      // What the settled book actually cost, as a positive figure. Realised P&L
+      // already nets this off against the wins; this is the losing half alone.
+      lost: settled.reduce((sum, p) => sum + Math.min(0, p.pnl ?? 0), 0) * -1,
     };
   }, [positions, claimed]);
 
@@ -205,7 +207,7 @@ export function Portfolio() {
           value={`${stats.realised >= 0 ? "+" : ""}${fmt(stats.realised)}`}
           tone={stats.realised >= 0 ? "good" : "bad"}
         />
-        <StatCard label="Open payout" value={fmt(stats.atRisk)} />
+        <StatCard label="Total loss" value={fmt(stats.lost)} tone={stats.lost > 0 ? "bad" : undefined} />
         <StatCard
           label="Unclaimed"
           value={fmt(stats.claimable)}

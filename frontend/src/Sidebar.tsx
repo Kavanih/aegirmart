@@ -1,6 +1,6 @@
 import { Logo } from "./Logo";
 
-export type View = "markets" | "swipe" | "accuracy" | "leaderboard" | "portfolio";
+export type View = "markets" | "swipe" | "accuracy" | "leaderboard" | "portfolio" | "bot";
 
 const stroke = {
   fill: "none",
@@ -23,6 +23,9 @@ const Icon = {
   leaderboard: () => (
     <svg viewBox="0 0 24 24" {...stroke} aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6" /></svg>
   ),
+  bot: () => (
+    <svg viewBox="0 0 24 24" {...stroke} aria-hidden="true"><rect x="4" y="8" width="16" height="11" rx="2.5" /><path d="M12 8V4.5M9 13h.01M15 13h.01M9.5 16h5" /></svg>
+  ),
   portfolio: () => (
     <svg viewBox="0 0 24 24" {...stroke} aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5V7" /></svg>
   ),
@@ -35,7 +38,10 @@ const TRADE: { id: View; label: string }[] = [
   { id: "leaderboard", label: "Leaderboard" },
 ];
 
-const ACCOUNT: { id: View; label: string }[] = [{ id: "portfolio", label: "Positions" }];
+const ACCOUNT: { id: View; label: string }[] = [
+  { id: "portfolio", label: "Positions" },
+  { id: "bot", label: "Maker bot" },
+];
 
 type Props = { view: View; onSelect: (view: View) => void };
 

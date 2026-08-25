@@ -287,6 +287,88 @@ export async function positionsFor(address: string, limit: number): Promise<Posi
   return data.OutcomeBalance.map(toPosition).filter((p) => p.marketId);
 }
 
+export type BookLevel = { side: string; price: number; size: number; owner: string };
+export type MarketBook = {
+  marketId: string;
+  asset: string;
+  intervalSec: number;
+  strike: number;
+  expiry: number;
+  lastPrice: number | null;
+  tradeCount: number;
+  bids: BookLevel[];
+  asks: BookLevel[];
+};
+
+/**
+ * Resting orders on every live market, split into bids and asks on the YES leg.
+ *
+ * A binary book has one price axis: BUY_YES and SELL_NO both want YES cheap, so
+ * they land on the same side of it. Reading only BUY_YES/SELL_YES would show
+ * half a book.
+ */
+export async function liveBooks(): Promise<MarketBook[]> {
+  const now = Math.floor(Date.now() / 1000);
+  const body = JSON.stringify({
+    query: `query Books($venue: String!, $now: numeric!) {
+      Order(
+        limit: 300
+        where: {
+          status: {_eq: "Open"}
+          market: {venueId: {_eq: $venue}, expiry: {_gt: $now}, strike: {_gt: "0"}}
+        }
+        order_by: {price: asc}
+      ) {
+        side price quantityRemaining owner
+        market { marketId asset intervalSec strike expiry lastPrice tradeCount }
+      }
+    }`,
+    variables: { venue: VENUE_ID, now: String(now) },
+  });
+
+  const data = await query<{ Order: Record<string, any>[] }>(body);
+  const byMarket = new Map<string, MarketBook>();
+
+  for (const row of data.Order) {
+    const m = row.market;
+    if (!m?.marketId) continue;
+
+    const book = byMarket.get(m.marketId) ?? {
+      marketId: String(m.marketId),
+      asset: String(m.asset ?? ""),
+      intervalSec: Number(m.intervalSec ?? 0),
+      strike: Number(m.strike ?? 0) / STRIKE_SCALE,
+      expiry: Number(m.expiry ?? 0),
+      lastPrice: m.lastPrice === null || m.lastPrice === undefined ? null : Number(m.lastPrice) / PRICE_SCALE,
+      tradeCount: Number(m.tradeCount ?? 0),
+      bids: [],
+      asks: [],
+    };
+
+    const side = String(row.side ?? "");
+    const level: BookLevel = {
+      side,
+      price: Number(row.price) / PRICE_SCALE,
+      size: Number(row.quantityRemaining) / COLLATERAL_SCALE,
+      owner: String(row.owner ?? "").toLowerCase(),
+    };
+    if (level.size <= 0) continue;
+
+    // Wanting YES is a bid; offering it is an ask, whichever leg names it.
+    if (side === "BUY_YES" || side === "SELL_NO") book.bids.push(level);
+    else book.asks.push(level);
+
+    byMarket.set(m.marketId, book);
+  }
+
+  for (const book of byMarket.values()) {
+    book.bids.sort((a, b) => b.price - a.price);
+    book.asks.sort((a, b) => a.price - b.price);
+  }
+
+  return [...byMarket.values()].sort((a, b) => a.expiry - b.expiry);
+}
+
 export type MarketTrade = { t: number; price: number; size: number; takerSide: string };
 
 /** One market by id, including dead ones, so a detail page can render history. */

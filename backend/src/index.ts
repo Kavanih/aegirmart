@@ -1,6 +1,6 @@
 import "dotenv/config";
 import express from "express";
-import { liveMarkets, strikeSeries, positionsFor, leaderboard, settledMarkets, ordersFor, marketById, tradesFor } from "./markets.js";
+import { liveMarkets, strikeSeries, positionsFor, leaderboard, settledMarkets, ordersFor, marketById, tradesFor, liveBooks } from "./markets.js";
 import { costBasisFor, type BasisIndex } from "./fills.js";
 import { startTracker, allRecords, modelScores, cachedPrediction, cachedPredictions } from "./tracker.js";
 import { allStats } from "./modelStats.js";
@@ -18,6 +18,7 @@ const narratives = new TtlCache<PredictionResult>();
 const seriesCache = new TtlCache<{ t: number; price: number }[]>();
 const boardCache = new TtlCache<unknown>();
 const settledCache = new TtlCache<Awaited<ReturnType<typeof settledMarkets>>>();
+const bookCache = new TtlCache<Awaited<ReturnType<typeof liveBooks>>>();
 const limiter = new RateLimiter(20, 3000);
 
 const app = express();
@@ -251,6 +252,18 @@ app.get("/api/market/:marketId", async (req, res) => {
     });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message });
+  }
+});
+
+/**
+ * The live book, for watching whether a maker is actually quoting. Cached
+ * briefly: this is read by a page that polls.
+ */
+app.get("/api/books", async (_req, res) => {
+  try {
+    res.json({ books: await bookCache.resolve("books", 5_000, () => liveBooks()) });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message, books: [] });
   }
 });
 

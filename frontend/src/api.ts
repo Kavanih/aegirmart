@@ -125,6 +125,25 @@ export type Position = {
   pnl: number | null;
 };
 
+export type BookLevel = { side: string; price: number; size: number; owner: string };
+export type MarketBook = {
+  marketId: string;
+  asset: string;
+  intervalSec: number;
+  strike: number;
+  expiry: number;
+  lastPrice: number | null;
+  tradeCount: number;
+  bids: BookLevel[];
+  asks: BookLevel[];
+};
+
+export async function fetchBooks(): Promise<MarketBook[]> {
+  const res = await fetch("/api/books");
+  if (!res.ok) return [];
+  return ((await res.json()) as { books: MarketBook[] }).books;
+}
+
 export type MarketTrade = { t: number; price: number; size: number; takerSide: string };
 
 export type MarketRead = {
