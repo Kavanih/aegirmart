@@ -4,6 +4,7 @@ import { cents, countdown, fetchLikes, fetchMarkets, fetchPredictions, money, ti
 import { ProbabilityRing } from "./ProbabilityRing";
 import { Sparkline } from "./Sparkline";
 import { Settled } from "./Settled";
+import { Hero } from "./Hero";
 
 const LANES = [60, 300];
 
@@ -85,35 +86,7 @@ export function MarketGrid({ onSwipe }: Props) {
 
   return (
     <div className="grid-page">
-      <section className="hero">
-        <div className="hero-copy">
-          <h2>Sixty second markets on BTC and ETH</h2>
-          <p>
-            Every window mints at the money and settles on the Somnia oracle. A model reads each contract against live
-            volatility and its own settled history, then tells you where the market is mispriced.
-          </p>
-          <div className="hero-actions">
-            <button className="cta" onClick={() => onSwipe(300)}>
-              Start swiping
-            </button>
-            <span className="hero-note">Somnia testnet</span>
-          </div>
-        </div>
-        <dl className="hero-stats">
-          <div>
-            <dt>Live contracts</dt>
-            <dd>{rows.length}</dd>
-          </div>
-          <div>
-            <dt>Fastest window</dt>
-            <dd>60s</dd>
-          </div>
-          <div>
-            <dt>Trades</dt>
-            <dd>{openInterest}</dd>
-          </div>
-        </dl>
-      </section>
+      <Hero liveCount={rows.length} tradeCount={openInterest} onSwipe={onSwipe} />
 
       <div className="grid-head">
         <h3>Live markets</h3>

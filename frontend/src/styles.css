@@ -399,22 +399,68 @@ body {
 .main.narrow { max-width: 470px; margin: 0 auto; }
 .lane-row { display: flex; justify-content: flex-end; }
 
-/* ---- Hero ---- */
-.hero { display: grid; grid-template-columns: 1.6fr 1fr; gap: 28px; align-items: center;
-  background: linear-gradient(135deg, var(--surface) 0%, var(--hero-2) 100%);
-  border: 1px solid var(--line); border-radius: 18px; padding: 28px; margin-bottom: 26px; }
-.hero-copy h2 { font-size: 27px; line-height: 1.2; margin: 0 0 10px; letter-spacing: -0.02em; font-weight: 650; }
-.hero-copy p { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0 0 18px; max-width: 52ch; }
+/* ---- Hero carousel ---- */
+/* Art fills the panel and a wash sits between it and the copy, so text keeps
+   its contrast over any image rather than depending on the photograph. */
+.hero { position: relative; overflow: hidden; isolation: isolate;
+  border: 1px solid var(--line); border-radius: 18px; margin-bottom: 26px;
+  min-height: 460px; display: flex; background: var(--surface); }
+
+.hero-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  transition: opacity 700ms ease; z-index: 0; }
+
+.hero-wash { position: absolute; inset: 0; z-index: 1;
+  background:
+    linear-gradient(90deg, rgba(4, 10, 15, 0.94) 0%, rgba(4, 10, 15, 0.82) 42%, rgba(4, 10, 15, 0.35) 78%, rgba(4, 10, 15, 0.15) 100%),
+    linear-gradient(0deg, rgba(4, 10, 15, 0.72) 0%, rgba(4, 10, 15, 0) 55%); }
+
+.hero-inner { position: relative; z-index: 2; flex: 1; display: flex; flex-direction: column;
+  justify-content: space-between; gap: 22px; padding: 24px 26px; }
+
+/* The wash is dark in both themes, so hero text is light in both. */
+.hero-badges { display: flex; flex-wrap: wrap; gap: 7px; }
+.hero-pill { font-size: 11px; font-weight: 600; padding: 5px 12px; border-radius: 999px;
+  color: #eaf3f7; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(4px); }
+.hero-pill.accent { background: var(--accent); border-color: transparent; color: var(--on-accent); }
+
+.hero-copy { max-width: 56ch; }
+.hero-eyebrow { margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--accent); }
+.hero-copy h2 { font-size: 31px; line-height: 1.15; margin: 0 0 12px; letter-spacing: -0.025em;
+  font-weight: 680; color: #f4fafc; }
+.hero-body { color: #c3d4dd; font-size: 13.5px; line-height: 1.62; margin: 0 0 20px; }
+
 .hero-actions { display: flex; align-items: center; gap: 14px; }
 .cta { background: var(--accent); color: var(--on-accent); border: none; border-radius: 10px;
   padding: 11px 22px; font-size: 14px; font-weight: 700; cursor: pointer; }
-.hero-note { font-size: 11px; color: var(--muted); }
+.cta:hover { filter: brightness(1.08); }
+.hero-note { font-size: 11px; color: #9fb3bf; }
 
-.hero-stats { display: flex; flex-direction: column; gap: 10px; margin: 0; }
-.hero-stats div { display: flex; justify-content: space-between; align-items: baseline;
-  border-bottom: 1px solid var(--line); padding-bottom: 8px; }
-.hero-stats dt { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
-.hero-stats dd { margin: 0; font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.hero-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.hero-arrow { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%;
+  cursor: pointer; color: #eaf3f7; background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.22); }
+.hero-arrow:hover { background: rgba(0, 0, 0, 0.68); border-color: var(--accent); }
+
+.hero-dots { display: flex; align-items: center; gap: 7px; }
+.hero-dot { height: 6px; width: 6px; padding: 0; border: none; border-radius: 999px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.42); transition: width 200ms ease, background 200ms ease; }
+.hero-dot.on { width: 22px; background: var(--accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-img { transition: none; }
+  .hero-dot { transition: none; }
+}
+
+@media (max-width: 760px) {
+  .hero { min-height: 414px; }
+  .hero-inner { padding: 18px; }
+  .hero-copy h2 { font-size: 23px; }
+  .hero-wash { background:
+    linear-gradient(90deg, rgba(4, 10, 15, 0.94) 0%, rgba(4, 10, 15, 0.86) 60%, rgba(4, 10, 15, 0.6) 100%),
+    linear-gradient(0deg, rgba(4, 10, 15, 0.8) 0%, rgba(4, 10, 15, 0) 60%); }
+}
 
 /* ---- Market grid ---- */
 .grid-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
