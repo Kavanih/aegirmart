@@ -45,7 +45,8 @@ export function windowLabel(intervalSec: number): string {
   return intervalSec >= 3600 ? `${intervalSec / 3600} hr` : `${intervalSec / 60} min`;
 }
 
-export function title(market: Market): string {
+/** Only needs the asset, so a settled row can use it as well as a live one. */
+export function title(market: { asset: string }): string {
   return `${market.asset} Up or Down`;
 }
 
@@ -139,6 +140,8 @@ export type SettledMarket = {
   wentUp: boolean;
   lastPrice: number | null;
   tradeCount: number;
+  /** Where the underlying closed, recovered from the next window's mint. */
+  settlePrice: number | null;
   modelProbability: number | null;
   modelSide: "up" | "down" | null;
   /** Null when the model never read this window, which is not the same as wrong. */

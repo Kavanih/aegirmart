@@ -205,11 +205,17 @@ export type SettledMarket = {
   wentUp: boolean;
   lastPrice: number | null;
   tradeCount: number;
+  /** Where the underlying actually closed, or null when it cannot be recovered. */
+  settlePrice: number | null;
 };
 
 /**
  * Recently resolved windows across every lane, newest first. Read only: the
  * landing page shows these as history, so nothing here is tradeable.
+ *
+ * The venue mints every window at the money, so the strike of the window that
+ * opened at this one's expiry is the spot price at settlement. Over fetch a
+ * little to give the newest rows a neighbour to pair against.
  */
 export async function settledMarkets(limit: number): Promise<SettledMarket[]> {
   const body = JSON.stringify({
@@ -218,17 +224,28 @@ export async function settledMarkets(limit: number): Promise<SettledMarket[]> {
         limit: $limit
         where: {
           venueId: {_eq: $venue}
-          finalized: {_eq: true}
           strike: {_gt: "0"}
         }
         order_by: {expiry: desc}
       ) { marketId asset strike expiry intervalSec winningOutcome lastPrice tradeCount }
     }`,
-    variables: { venue: VENUE_ID, limit },
+    // Unsettled windows are kept for the mint index: a window that closed needs
+    // the one that opened at its expiry, and that successor is often still live.
+    variables: { venue: VENUE_ID, limit: limit + 24 },
   });
 
   const data = await query<{ Market: Record<string, string | null>[] }>(body);
-  return data.Market
+  const all = data.Market.map((m) => ({
+    asset: String(m.asset),
+    intervalSec: Number(m.intervalSec),
+    expiry: Number(m.expiry),
+    strike: Number(m.strike) / STRIKE_SCALE,
+  }));
+
+  const mintedAt = new Map<string, number>();
+  for (const r of all) mintedAt.set(`${r.asset}:${r.intervalSec}:${r.expiry - r.intervalSec}`, r.strike);
+
+  const rows = data.Market
     .filter((m) => m.winningOutcome !== null)
     .map((m) => ({
       marketId: String(m.marketId),
@@ -239,7 +256,14 @@ export async function settledMarkets(limit: number): Promise<SettledMarket[]> {
       wentUp: Number(m.winningOutcome) === 0,
       lastPrice: m.lastPrice === null ? null : Number(m.lastPrice) / PRICE_SCALE,
       tradeCount: Number(m.tradeCount ?? 0),
+      settlePrice: null as number | null,
     }));
+
+  for (const r of rows) {
+    r.settlePrice = mintedAt.get(`${r.asset}:${r.intervalSec}:${r.expiry}`) ?? null;
+  }
+
+  return rows.slice(0, limit);
 }
 
 export async function positionsFor(address: string, limit: number): Promise<Position[]> {
