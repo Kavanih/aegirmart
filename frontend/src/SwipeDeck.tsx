@@ -5,6 +5,7 @@ import { useSwipe, type Direction } from "./useSwipe";
 import { useAccount } from "wagmi";
 import { useTrade } from "./wallet/useTrade";
 import { useToast } from "./Toast";
+import { StakePanel } from "./StakePanel";
 
 const PREFETCH_DEPTH = 3;
 
@@ -242,6 +243,8 @@ export function SwipeDeck({ intervalSec, focusMarketId }: DeckProps) {
         )}
       </div>
 
+      <StakePanel stake={stake} onChange={setStake} />
+
       <div className="controls">
         <button className="ctl down" onClick={() => commitByKey("down")} disabled={!top || !online}>
           Down
@@ -252,22 +255,6 @@ export function SwipeDeck({ intervalSec, focusMarketId }: DeckProps) {
         <button className="ctl up" onClick={() => commitByKey("up")} disabled={!top || !online}>
           Up
         </button>
-      </div>
-
-      <div className="stake-row">
-        <span className="stake-label">Stake</span>
-        {[1, 5, 25].map((amount) => (
-          <button
-            key={amount}
-            className={amount === stake ? "stake on" : "stake"}
-            aria-pressed={amount === stake}
-            onClick={() => setStake(amount)}
-          >
-            {amount}
-          </button>
-        ))}
-        <span className="stake-unit">tUSDC</span>
-        {!isConnected && <span className="stake-note">Paper mode until a wallet connects</span>}
       </div>
 
       {pending && (

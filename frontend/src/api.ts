@@ -157,8 +157,6 @@ export function stamp(seconds: number): string {
   return `${d.toLocaleDateString([], { day: "2-digit", month: "short" })} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 }
 
-export type Like = { marketId: string; count: number; liked: boolean };
-
 export function shortAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
@@ -228,25 +226,6 @@ export async function fetchPositions(address: string): Promise<Position[]> {
   const res = await fetch(`/api/positions?address=${address}`);
   if (!res.ok) throw new Error(`positions ${res.status}`);
   return ((await res.json()) as { positions: Position[] }).positions;
-}
-
-export async function fetchLikes(ids: string[], address: string | null): Promise<Like[]> {
-  if (ids.length === 0) return [];
-  const query = new URLSearchParams({ ids: ids.join(",") });
-  if (address) query.set("address", address);
-  const res = await fetch(`/api/likes?${query}`);
-  if (!res.ok) return [];
-  return ((await res.json()) as { likes: Like[] }).likes;
-}
-
-export async function toggleLike(marketId: string, address: string) {
-  const res = await fetch("/api/likes", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ marketId, address }),
-  });
-  if (!res.ok) throw new Error("like failed");
-  return (await res.json()) as { count: number; liked: boolean };
 }
 
 export type PredictionRecord = {

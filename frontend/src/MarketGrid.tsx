@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useAccount } from "wagmi";
-import { cents, countdown, fetchLikes, fetchMarkets, fetchPredictions, money, title, toggleLike, windowLabel, type Deck, type Like, type Market, type PredictionRecord, type PricePoint } from "./api";
+import { cents, countdown, fetchMarkets, fetchPredictions, money, title, windowLabel, type Deck, type Market, type PredictionRecord, type PricePoint } from "./api";
 import { ProbabilityRing } from "./ProbabilityRing";
 import { Sparkline } from "./Sparkline";
 import { AssetMark } from "./AssetMark";
@@ -17,9 +16,7 @@ export function MarketGrid({ onSwipe }: Props) {
   const [decks, setDecks] = useState<Record<number, Deck>>({});
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const [filter, setFilter] = useState<"all" | "BTC" | "ETH">("all");
-  const [likes, setLikes] = useState<Record<string, Like>>({});
   const [reads, setReads] = useState<Record<string, PredictionRecord>>({});
-  const { address } = useAccount();
 
   useEffect(() => {
     const tick = window.setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
@@ -63,10 +60,6 @@ export function MarketGrid({ onSwipe }: Props) {
     const ids = rows.map((r) => r.market.marketId);
     if (ids.length === 0) return;
     let alive = true;
-    fetchLikes(ids, address ?? null).then((list) => {
-      if (!alive) return;
-      setLikes(Object.fromEntries(list.map((l) => [l.marketId, l])));
-    });
     // Stored reads only, so refreshing the grid never spends model budget.
     fetchPredictions(ids).then((list) => {
       if (!alive) return;
@@ -75,13 +68,7 @@ export function MarketGrid({ onSwipe }: Props) {
     return () => {
       alive = false;
     };
-  }, [rows.map((r) => r.market.marketId).join(","), address]);
-
-  const onLike = async (marketId: string) => {
-    if (!address) return;
-    const next = await toggleLike(marketId, address).catch(() => null);
-    if (next) setLikes((prev) => ({ ...prev, [marketId]: { marketId, ...next } }));
-  };
+  }, [rows.map((r) => r.market.marketId).join(",")]);
 
   const openInterest = rows.reduce((sum, r) => sum + r.market.tradeCount, 0);
 
@@ -177,15 +164,6 @@ export function MarketGrid({ onSwipe }: Props) {
 
                 <footer>
                   <span className="market-clock">{countdown(market.expiry, now)}</span>
-                  <button
-                    className={likes[market.marketId]?.liked ? "like on" : "like"}
-                    onClick={() => onLike(market.marketId)}
-                    disabled={!address}
-                    title={address ? "Like this market" : "Connect a wallet to like"}
-                    aria-pressed={Boolean(likes[market.marketId]?.liked)}
-                  >
-                    {likes[market.marketId]?.liked ? "Liked" : "Like"} {likes[market.marketId]?.count ?? 0}
-                  </button>
                   <span className="market-vol">{market.tradeCount === 0 ? "No trades" : `${market.tradeCount} trades`}</span>
                 </footer>
               </article>

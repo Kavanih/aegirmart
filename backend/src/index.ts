@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import { liveMarkets, strikeSeries, positionsFor, leaderboard, settledMarkets, ordersFor } from "./markets.js";
-import { likesFor, toggleLike } from "./social.js";
 import { costBasisFor, type BasisIndex } from "./fills.js";
 import { startTracker, allRecords, modelScores, cachedPrediction, cachedPredictions } from "./tracker.js";
 import { allStats } from "./modelStats.js";
@@ -222,22 +221,6 @@ app.get("/api/orders", async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: (err as Error).message, orders: [] });
   }
-});
-
-app.get("/api/likes", (req, res) => {
-  const ids = String(req.query.ids ?? "").split(",").filter(Boolean);
-  const address = String(req.query.address ?? "").toLowerCase() || null;
-  res.json({ likes: likesFor(ids, address) });
-});
-
-app.post("/api/likes", (req, res) => {
-  const marketId = String(req.body?.marketId ?? "");
-  const address = String(req.body?.address ?? "").toLowerCase();
-  if (!marketId || !/^0x[0-9a-f]{40}$/.test(address)) {
-    res.status(400).json({ error: "marketId and a connected address are required" });
-    return;
-  }
-  res.json(toggleLike(marketId, address));
 });
 
 app.get("/api/accuracy", (_req, res) => {

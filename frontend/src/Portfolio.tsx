@@ -11,6 +11,18 @@ const TABS = ["Positions", "Orders", "History"] as const;
 type Tab = (typeof TABS)[number];
 type AssetFilter = "All" | "BTC" | "ETH";
 
+/**
+ * Sort options differ per tab because the columns do: an order has no P&L, and
+ * an open position has no result to rank by.
+ */
+const SORTS = {
+  Positions: ["Newest", "Oldest", "Largest"],
+  Orders: ["Newest", "Oldest", "Largest", "Filled first"],
+  History: ["Newest", "Oldest", "Best result", "Worst result"],
+} as const;
+
+type Sort = (typeof SORTS)[Tab][number];
+
 const EXPLORER = "https://shannon-explorer.somnia.network/tx";
 
 /** Shares to price against: a redeemed win has no balance left to read. */
@@ -91,6 +103,7 @@ export function Portfolio() {
   const [failed, setFailed] = useState(false);
   const [tab, setTab] = useState<Tab>("Positions");
   const [assetFilter, setAssetFilter] = useState<AssetFilter>("All");
+  const [sort, setSort] = useState<Sort>("Newest");
   const [claimed, setClaimed] = useState<Set<string>>(() => new Set());
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
 
@@ -127,9 +140,30 @@ export function Portfolio() {
   const filtered = useMemo(() => {
     const rows = positions ?? [];
     const byAsset = assetFilter === "All" ? rows : rows.filter((p) => p.asset === assetFilter);
-    if (tab === "History") return byAsset.filter((p) => outcomeOf(p) !== "open");
-    return byAsset.filter((p) => outcomeOf(p) === "open");
-  }, [positions, assetFilter, tab]);
+    const rowsForTab =
+      tab === "History"
+        ? byAsset.filter((p) => outcomeOf(p) !== "open")
+        : byAsset.filter((p) => outcomeOf(p) === "open");
+
+    const pnl = (p: Position) => p.pnl ?? 0;
+    return [...rowsForTab].sort((a, b) => {
+      if (sort === "Oldest") return a.expiry - b.expiry;
+      if (sort === "Largest") return sharesOf(b) - sharesOf(a);
+      if (sort === "Best result") return pnl(b) - pnl(a);
+      if (sort === "Worst result") return pnl(a) - pnl(b);
+      return b.expiry - a.expiry;
+    });
+  }, [positions, assetFilter, tab, sort]);
+
+  const sortedOrders = useMemo(() => {
+    const rows = (orders ?? []).filter((o) => assetFilter === "All" || o.asset === assetFilter);
+    return [...rows].sort((a, b) => {
+      if (sort === "Oldest") return a.placedAt - b.placedAt;
+      if (sort === "Largest") return b.quantity - a.quantity;
+      if (sort === "Filled first") return b.filled - a.filled || b.placedAt - a.placedAt;
+      return b.placedAt - a.placedAt;
+    });
+  }, [orders, assetFilter, sort]);
 
   const onClaim = (position: Position) => {
     const id = toast.push("pending", `Claiming ${position.asset} ${position.outcomeIndex === 0 ? "UP" : "DOWN"}`);
@@ -181,7 +215,15 @@ export function Portfolio() {
 
       <div className="filter-row">
         {TABS.map((t) => (
-          <button key={t} className={t === tab ? "filter on" : "filter"} aria-pressed={t === tab} onClick={() => setTab(t)}>
+          <button
+            key={t}
+            className={t === tab ? "filter on" : "filter"}
+            aria-pressed={t === tab}
+            onClick={() => {
+              setTab(t);
+              if (!(SORTS[t] as readonly string[]).includes(sort)) setSort("Newest");
+            }}
+          >
             {t}
           </button>
         ))}
@@ -191,6 +233,17 @@ export function Portfolio() {
             {f}
           </button>
         ))}
+
+        <label className="sort-control">
+          Sort
+          <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+            {SORTS[tab].map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {failed && <EmptyState title="History unavailable" hint="The indexer did not respond." />}
@@ -198,7 +251,7 @@ export function Portfolio() {
         <TableSkeleton columns={["Market", "Side", "Shares", "Avg", "Cost", "Pays", "P&L"]} rows={4} />
       )}
 
-      {tab === "Orders" && <OrdersTable orders={orders} />}
+      {tab === "Orders" && <OrdersTable orders={orders && sortedOrders} />}
 
       {tab !== "Orders" && positions && !failed && (
         filtered.length === 0 ? (

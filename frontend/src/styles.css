@@ -487,6 +487,14 @@ body {
 
 /* An order's fate, at a glance: filled is a result, expired and cancelled are
    not failures of the app but they are not fills either. */
+/* Sits with the filter pills but reads as a control, not another toggle. */
+.sort-control { display: inline-flex; align-items: center; gap: 7px; margin-left: auto;
+  font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+.sort-control select { background: var(--surface); color: var(--text); cursor: pointer;
+  border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px;
+  font-size: 12px; font-family: inherit; text-transform: none; letter-spacing: normal; }
+.sort-control select:hover { border-color: var(--hover-line); }
+
 .order-status { font-weight: 600; }
 .order-status.filled { color: var(--up); }
 .order-status.open, .order-status.resting, .order-status.partiallyfilled { color: var(--accent); }
@@ -588,19 +596,34 @@ body {
 .empty-state { text-align: center; color: var(--muted); font-size: 13px; padding: 56px 0; line-height: 1.7; }
 .empty-state strong { display: block; color: var(--text); font-size: 15px; margin-bottom: 6px; font-weight: 600; }
 
-.like { display: inline-flex; align-items: center; gap: 5px; background: none; border: none;
-  color: var(--muted); font-size: 11px; cursor: pointer; padding: 0; }
-.like.on { color: var(--accent); }
-.like:disabled { cursor: default; opacity: 0.55; }
-
 /* Stake selector and transaction status. */
-.stake-row { display: flex; align-items: center; gap: 6px; padding-bottom: 14px; }
-.stake-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
-.stake { background: var(--surface); border: 1px solid var(--line); color: var(--muted);
-  border-radius: 8px; padding: 4px 12px; font-size: 12px; cursor: pointer; font-variant-numeric: tabular-nums; }
-.stake.on { color: var(--text); border-color: var(--accent-deep); background: var(--surface-2); }
-.stake-unit { font-size: 11px; color: var(--muted); }
-.stake-note { font-size: 10px; color: var(--muted); margin-left: auto; }
+/* Amount ticket: the figure is the loudest thing, the quick buttons stack. */
+.stake-panel { border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+  padding: 13px 14px; display: flex; flex-direction: column; gap: 11px; margin-bottom: 14px; }
+.stake-panel header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.stake-head { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.stake-title { font-size: 12px; font-weight: 650; color: var(--text); }
+.stake-avail { font-size: 10.5px; color: var(--muted); }
+
+.stake-input { display: inline-flex; align-items: baseline; gap: 2px; color: var(--text);
+  font-size: 27px; font-weight: 650; font-variant-numeric: tabular-nums; }
+/* Left aligned so the figure reads as one token with the sign, and widened
+   only as far as a realistic stake needs. */
+.stake-input input { width: 6ch; background: none; border: none; padding: 0; text-align: left;
+  color: inherit; font: inherit; }
+.stake-input input:focus { outline: none; color: var(--accent); }
+/* The spinners fight a right aligned figure and add nothing here. */
+.stake-input input::-webkit-outer-spin-button,
+.stake-input input::-webkit-inner-spin-button { appearance: none; margin: 0; }
+.stake-input input { appearance: textfield; -moz-appearance: textfield; }
+
+.stake-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.stake { background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
+  border-radius: 999px; padding: 6px 13px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.stake:disabled { opacity: 0.45; cursor: default; }
+.stake.ghost { background: none; color: var(--muted); font-weight: 500; margin-left: auto; }
+
+.stake-warn { margin: 0; font-size: 11px; color: var(--down); line-height: 1.5; }
 
 .trade-bar {
   position: fixed; left: 50%; transform: translateX(-50%); bottom: 78px;
@@ -705,7 +728,8 @@ button { font: inherit; }
 .empty-hint { color: var(--muted); font-size: 13px; line-height: 1.6; max-width: 42ch; }
 
 /* Hover affordances that were missing. */
-.lane:hover, .filter:hover, .stake:hover { border-color: var(--hover-line); color: var(--text); }
+.lane:hover, .filter:hover { border-color: var(--hover-line); color: var(--text); }
+.stake:not(:disabled):hover { border-color: var(--accent); }
 .ctl:not(:disabled):hover { border-color: var(--hover-line); }
 .wallet-connect:hover { filter: brightness(1.08); }
 .claim:hover:not(:disabled) { background: var(--up-bg-hover); }
