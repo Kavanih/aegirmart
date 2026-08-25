@@ -287,6 +287,57 @@ export async function positionsFor(address: string, limit: number): Promise<Posi
   return data.OutcomeBalance.map(toPosition).filter((p) => p.marketId);
 }
 
+export type MarketTrade = { t: number; price: number; size: number; takerSide: string };
+
+/** One market by id, including dead ones, so a detail page can render history. */
+export async function marketById(marketId: string): Promise<Market | null> {
+  const body = JSON.stringify({
+    query: `query One($id: String!) {
+      Market(limit: 1, where: {marketId: {_eq: $id}}) {
+        marketId asset strike expiry intervalSec lastPrice tradeCount poolAddress collateral
+        finalized winningOutcome
+      }
+    }`,
+    variables: { id: marketId },
+  });
+
+  const data = await query<{ Market: Record<string, string | null>[] }>(body);
+  const row = data.Market[0];
+  if (!row) return null;
+  return {
+    ...toMarket(row),
+    finalized: Boolean(row.finalized),
+    wentUp: row.winningOutcome === null ? null : Number(row.winningOutcome) === 0,
+  } as Market & { finalized: boolean; wentUp: boolean | null };
+}
+
+/**
+ * Traded prices for one market, oldest first.
+ *
+ * quoteQuantity is the YES side value of the fill, so the ratio is the YES
+ * probability the trade printed at, whichever leg the taker was on.
+ */
+export async function tradesFor(marketId: string, limit: number): Promise<MarketTrade[]> {
+  const body = JSON.stringify({
+    query: `query Trades($id: String!, $limit: Int!) {
+      Fill(limit: $limit, order_by: {timestamp: desc}, where: {market: {marketId: {_eq: $id}}}) {
+        timestamp quantity quoteQuantity takerSide
+      }
+    }`,
+    variables: { id: marketId, limit },
+  });
+
+  const data = await query<{ Fill: Record<string, string>[] }>(body);
+  return data.Fill
+    .map((f) => {
+      const size = Number(f.quantity) / COLLATERAL_SCALE;
+      const quote = Number(f.quoteQuantity) / COLLATERAL_SCALE;
+      return { t: Number(f.timestamp), price: size > 0 ? quote / size : 0, size, takerSide: String(f.takerSide ?? "") };
+    })
+    .filter((f) => f.size > 0 && f.price > 0 && f.price < 1)
+    .reverse();
+}
+
 export type OrderRow = {
   orderId: string;
   marketId: string;

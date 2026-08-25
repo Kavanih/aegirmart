@@ -125,6 +125,31 @@ export type Position = {
   pnl: number | null;
 };
 
+export type MarketTrade = { t: number; price: number; size: number; takerSide: string };
+
+export type MarketRead = {
+  probability: number;
+  side: "up" | "down";
+  confidence: "low" | "medium" | "high";
+  reasoning: string;
+  model: string;
+  outcome: "up" | "down" | null;
+  correct: boolean | null;
+};
+
+export type MarketDetail = {
+  market: Market & { finalized?: boolean; wentUp?: boolean | null };
+  series: PricePoint[];
+  trades: MarketTrade[];
+  read: MarketRead | null;
+};
+
+export async function fetchMarketDetail(marketId: string): Promise<MarketDetail | null> {
+  const res = await fetch(`/api/market/${marketId}`);
+  if (!res.ok) return null;
+  return (await res.json()) as MarketDetail;
+}
+
 export type OrderRow = {
   orderId: string;
   marketId: string;

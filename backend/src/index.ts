@@ -1,6 +1,6 @@
 import "dotenv/config";
 import express from "express";
-import { liveMarkets, strikeSeries, positionsFor, leaderboard, settledMarkets, ordersFor } from "./markets.js";
+import { liveMarkets, strikeSeries, positionsFor, leaderboard, settledMarkets, ordersFor, marketById, tradesFor } from "./markets.js";
 import { costBasisFor, type BasisIndex } from "./fills.js";
 import { startTracker, allRecords, modelScores, cachedPrediction, cachedPredictions } from "./tracker.js";
 import { allStats } from "./modelStats.js";
@@ -205,6 +205,52 @@ app.get("/api/positions", async (req, res) => {
     res.json({ positions: priced });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message, positions: [] });
+  }
+});
+
+/**
+ * Everything one contract's page needs in a single round trip: the market, the
+ * underlying path it settles against, its own prints, and the stored model read.
+ */
+app.get("/api/market/:marketId", async (req, res) => {
+  const marketId = String(req.params.marketId ?? "");
+  if (!/^0x[0-9a-fA-F]{2,66}$/.test(marketId)) {
+    res.status(400).json({ error: "valid marketId required" });
+    return;
+  }
+
+  try {
+    const market = await marketById(marketId);
+    if (!market) {
+      res.status(404).json({ error: "market not found" });
+      return;
+    }
+
+    // Prints are the only real probability history here; the book is thin, so
+    // the underlying path against the strike carries the rest of the story.
+    const [series, trades] = await Promise.all([
+      seriesCache.resolve(market.asset, 20_000, () => strikeSeries(market.asset, 60)),
+      tradesFor(marketId, 200).catch((): Awaited<ReturnType<typeof tradesFor>> => []),
+    ]);
+
+    const read = cachedPredictions([marketId])[0] ?? null;
+
+    res.json({
+      market,
+      series,
+      trades,
+      read: read && {
+        probability: read.probability,
+        side: read.side,
+        confidence: read.confidence,
+        reasoning: read.reasoning,
+        model: read.model,
+        outcome: read.outcome,
+        correct: read.correct,
+      },
+    });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
   }
 });
 

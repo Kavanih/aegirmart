@@ -8,11 +8,14 @@ import { Hero } from "./Hero";
 
 const LANES = [60, 300];
 
-type Props = { onSwipe: (intervalSec: number, marketId?: string) => void };
+type Props = {
+  onSwipe: (intervalSec: number, marketId?: string) => void;
+  onOpen: (marketId: string) => void;
+};
 
 type Row = { market: Market; series: PricePoint[]; spot: number | null };
 
-export function MarketGrid({ onSwipe }: Props) {
+export function MarketGrid({ onSwipe, onOpen }: Props) {
   const [decks, setDecks] = useState<Record<number, Deck>>({});
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const [filter, setFilter] = useState<"all" | "BTC" | "ETH">("all");
@@ -100,10 +103,14 @@ export function MarketGrid({ onSwipe }: Props) {
               <article key={market.marketId} className="market-card">
                 <header>
                   <AssetMark asset={market.asset} />
-                  <div className="market-title">
+                  <button
+                    className="market-title as-link"
+                    onClick={() => onOpen(market.marketId)}
+                    title={`Open ${title(market)}`}
+                  >
                     <h4>{title(market)}</h4>
                     <span className="market-sub">{windowLabel(market.intervalSec)}</span>
-                  </div>
+                  </button>
                   <ProbabilityRing
                     probability={read ? read.probability : null}
                     confidence={read?.confidence}
@@ -172,7 +179,7 @@ export function MarketGrid({ onSwipe }: Props) {
         </div>
       )}
 
-      <Settled now={now} />
+      <Settled now={now} onOpen={onOpen} />
     </div>
   );
 }

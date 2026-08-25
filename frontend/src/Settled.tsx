@@ -3,7 +3,7 @@ import { ago, cents, fetchSettled, money, title, windowLabel, type PricePoint, t
 import { Sparkline } from "./Sparkline";
 import { AssetMark } from "./AssetMark";
 
-type Props = { now: number };
+type Props = { now: number; onOpen: (marketId: string) => void };
 
 /**
  * Price path per asset, reconstructed from the windows themselves: the venue
@@ -26,7 +26,7 @@ function seriesByAsset(rows: SettledMarket[]): Map<string, PricePoint[]> {
  * Resolved windows, newest first. Deliberately not interactive: these markets
  * are closed, so the card carries a result where a live one carries controls.
  */
-export function Settled({ now }: Props) {
+export function Settled({ now, onOpen }: Props) {
   const [rows, setRows] = useState<SettledMarket[] | null>(null);
 
   useEffect(() => {
@@ -72,10 +72,14 @@ export function Settled({ now }: Props) {
               <article key={row.marketId} className="market-card settled-card">
                 <header>
                   <AssetMark asset={row.asset} />
-                  <div className="market-title">
+                  <button
+                    className="market-title as-link"
+                    onClick={() => onOpen(row.marketId)}
+                    title={`Open ${title(row)}`}
+                  >
                     <h4>{title(row)}</h4>
                     <span className="market-sub">{windowLabel(row.intervalSec)} · {ago(row.expiry, now)}</span>
-                  </div>
+                  </button>
                   <span className={row.wentUp ? "settled-out up" : "settled-out down"}>
                     {row.wentUp ? "UP" : "DOWN"}
                   </span>

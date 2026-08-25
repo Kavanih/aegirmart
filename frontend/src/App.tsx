@@ -4,6 +4,7 @@ import { MarketGrid } from "./MarketGrid";
 import { Leaderboard } from "./Leaderboard";
 import { Portfolio } from "./Portfolio";
 import { Accuracy } from "./Accuracy";
+import { MarketDetail } from "./MarketDetail";
 import { Sidebar, type View } from "./Sidebar";
 import { ThemeToggle } from "./Theme";
 import { ConnectWallet } from "./wallet/ConnectWallet";
@@ -27,6 +28,7 @@ export function App() {
   const [intervalSec, setIntervalSec] = useState(LANES[0].intervalSec);
   const [navOpen, setNavOpen] = useState(false);
   const [focusMarketId, setFocusMarketId] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   // A card in the grid opens the deck on that exact contract; the hero opens
   // the lane it advertises.
@@ -38,6 +40,13 @@ export function App() {
 
   const select = (next: View) => {
     setView(next);
+    setDetailId(null);
+    setNavOpen(false);
+  };
+
+  const openDetail = (marketId: string) => {
+    setDetailId(marketId);
+    setView("markets");
     setNavOpen(false);
   };
 
@@ -65,7 +74,12 @@ export function App() {
         </header>
 
         <main className={view === "swipe" ? "main narrow" : "main"}>
-          {view === "markets" && <MarketGrid onSwipe={openSwipe} />}
+          {view === "markets" &&
+            (detailId ? (
+              <MarketDetail marketId={detailId} onBack={() => setDetailId(null)} />
+            ) : (
+              <MarketGrid onSwipe={openSwipe} onOpen={openDetail} />
+            ))}
           {view === "accuracy" && <Accuracy />}
           {view === "leaderboard" && <Leaderboard />}
           {view === "portfolio" && <Portfolio />}
