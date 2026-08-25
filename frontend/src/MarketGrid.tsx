@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
-import { countdown, fetchLikes, fetchMarkets, money, title, toggleLike, windowLabel, type Deck, type Like, type Market, type PricePoint } from "./api";
+import { cents, countdown, fetchLikes, fetchMarkets, fetchPredictions, money, title, toggleLike, windowLabel, type Deck, type Like, type Market, type PredictionRecord, type PricePoint } from "./api";
 import { ProbabilityRing } from "./ProbabilityRing";
 import { Sparkline } from "./Sparkline";
 
@@ -15,6 +15,7 @@ export function MarketGrid({ onSwipe }: Props) {
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const [filter, setFilter] = useState<"all" | "BTC" | "ETH">("all");
   const [likes, setLikes] = useState<Record<string, Like>>({});
+  const [reads, setReads] = useState<Record<string, PredictionRecord>>({});
   const { address } = useAccount();
 
   useEffect(() => {
@@ -62,6 +63,11 @@ export function MarketGrid({ onSwipe }: Props) {
     fetchLikes(ids, address ?? null).then((list) => {
       if (!alive) return;
       setLikes(Object.fromEntries(list.map((l) => [l.marketId, l])));
+    });
+    // Stored reads only, so refreshing the grid never spends model budget.
+    fetchPredictions(ids).then((list) => {
+      if (!alive) return;
+      setReads(Object.fromEntries(list.map((r) => [r.marketId, r])));
     });
     return () => {
       alive = false;
@@ -125,6 +131,9 @@ export function MarketGrid({ onSwipe }: Props) {
         <div className="market-grid">
           {rows.map(({ market, series, spot }) => {
             const drift = spot === null ? null : spot - market.strike;
+            const read = reads[market.marketId];
+            // Only meaningful against a real book: an edge against no price is not an edge.
+            const edge = read && market.lastPrice !== null ? read.probability - market.lastPrice : null;
             return (
               <article key={market.marketId} className="market-card">
                 <header>
@@ -133,18 +142,43 @@ export function MarketGrid({ onSwipe }: Props) {
                     <h4>{title(market)}</h4>
                     <span className="market-sub">{windowLabel(market.intervalSec)}</span>
                   </div>
-                  <ProbabilityRing probability={market.lastPrice} />
+                  <ProbabilityRing
+                    probability={read ? read.probability : null}
+                    confidence={read?.confidence}
+                    caption="Model"
+                    pending={!read}
+                  />
                 </header>
 
                 <Sparkline points={series} target={market.strike} height={40} />
 
                 <div className="market-levels">
                   <span>Target ${money(market.strike)}</span>
-                  {drift !== null && (
+                  {drift !== null && Math.abs(drift) >= 0.01 && (
                     <span className={drift >= 0 ? "over" : "under"}>
                       {drift >= 0 ? "↑" : "↓"} ${money(Math.abs(drift))}
                     </span>
                   )}
+                </div>
+
+                <div className="market-read">
+                  <span className="read-cell">
+                    <span className="read-key">Market</span>
+                    <span className="read-val">
+                      {market.lastPrice === null ? <em className="read-idle">no book yet</em> : cents(market.lastPrice)}
+                    </span>
+                  </span>
+                  <span className="read-cell">
+                    <span className="read-key">Edge</span>
+                    <span className={edge === null ? "read-val" : edge >= 0 ? "read-val over" : "read-val under"}>
+                      {edge === null ? (
+                        <em className="read-idle">{read ? "needs a market" : "no read yet"}</em>
+                      ) : (
+                        `${edge >= 0 ? "+" : ""}${Math.round(edge * 100)}c`
+                      )}
+                    </span>
+                  </span>
+                  {read && <span className={`conf ${read.confidence}`}>{read.confidence}</span>}
                 </div>
 
                 <div className="market-actions">
@@ -163,7 +197,7 @@ export function MarketGrid({ onSwipe }: Props) {
                   >
                     {likes[market.marketId]?.liked ? "Liked" : "Like"} {likes[market.marketId]?.count ?? 0}
                   </button>
-                  <span className="market-vol">{market.tradeCount} trades</span>
+                  <span className="market-vol">{market.tradeCount === 0 ? "No trades" : `${market.tradeCount} trades`}</span>
                 </footer>
               </article>
             );

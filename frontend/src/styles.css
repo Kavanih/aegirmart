@@ -323,6 +323,32 @@ body {
 .market-levels .over { color: var(--up); }
 .market-levels .under { color: var(--down); }
 
+/* The three numbers the product exists to compare: what the book says, what the
+   model says, and the gap. Each states WHY it is blank rather than showing --. */
+.market-read { display: flex; align-items: center; gap: 14px; padding: 8px 10px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px;
+  font-variant-numeric: tabular-nums; }
+.read-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.read-key { font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.read-val { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.read-val.over { color: var(--up); }
+.read-val.under { color: var(--down); }
+/* Absence is a state, not an error: it reads quieter than a real number. */
+.read-idle { font-style: normal; font-size: 11px; font-weight: 400; color: var(--muted); opacity: 0.75; }
+
+.conf { margin-left: auto; font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em;
+  padding: 3px 7px; border-radius: 999px; border: 1px solid currentColor; opacity: 0.9; }
+.conf.low { color: var(--conf-low); }
+.conf.medium { color: var(--conf-medium); }
+.conf.high { color: var(--conf-high); }
+
+/* A ring still waiting on its read breathes, so blank looks pending not broken. */
+.ring.pending .ring-dash { animation: ring-wait 1.8s ease-in-out infinite; }
+@keyframes ring-wait { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.75; } }
+@media (prefers-reduced-motion: reduce) {
+  .ring.pending .ring-dash { animation: none; opacity: 0.5; }
+}
+
 .market-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .mini { border-radius: 8px; padding: 9px 0; font-size: 13px; font-weight: 600; cursor: pointer;
   background: var(--surface-2); border: 1px solid var(--line); }

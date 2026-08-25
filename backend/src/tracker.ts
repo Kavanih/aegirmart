@@ -114,6 +114,15 @@ export function cachedPrediction(marketId: string): PredictionRecord | undefined
   return records.find((r) => r.marketId === marketId);
 }
 
+/**
+ * Batch lookup for the grid. Reads only what the tracker already stored, so a
+ * page of cards costs nothing against the daily allowance.
+ */
+export function cachedPredictions(ids: string[]): PredictionRecord[] {
+  const wanted = new Set(ids);
+  return records.filter((r) => wanted.has(r.marketId));
+}
+
 async function predictMarket(market: Market, apiKey: string): Promise<void> {
   const evidence = await buildEvidence(market);
   // Leave a third of the window for the card to actually show the read.

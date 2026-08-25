@@ -125,6 +125,17 @@ export function shortAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+/**
+ * Reads the tracker's stored predictions. Costs nothing against the model
+ * allowance, so the grid can poll it as often as it polls markets.
+ */
+export async function fetchPredictions(ids: string[]): Promise<PredictionRecord[]> {
+  if (ids.length === 0) return [];
+  const res = await fetch(`/api/predictions?ids=${ids.join(",")}`);
+  if (!res.ok) return [];
+  return ((await res.json()) as { predictions: PredictionRecord[] }).predictions;
+}
+
 export async function fetchLeaderboard(): Promise<Trader[]> {
   const res = await fetch("/api/leaderboard");
   if (!res.ok) throw new Error(`leaderboard ${res.status}`);

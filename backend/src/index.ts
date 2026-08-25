@@ -3,7 +3,7 @@ import express from "express";
 import { liveMarkets, strikeSeries, positionsFor, leaderboard } from "./markets.js";
 import { likesFor, toggleLike } from "./social.js";
 import { costBasisFor, type BasisIndex } from "./fills.js";
-import { startTracker, allRecords, modelScores, cachedPrediction } from "./tracker.js";
+import { startTracker, allRecords, modelScores, cachedPrediction, cachedPredictions } from "./tracker.js";
 import { allStats } from "./modelStats.js";
 import { buildEvidence } from "./quant.js";
 import { predict, quotaBlockedFor } from "./openrouter.js";
@@ -126,6 +126,12 @@ app.post("/api/prediction", async (req, res) => {
   } catch (err) {
     res.json({ status: "unavailable", reason: (err as Error).message });
   }
+});
+
+// Cached reads only. Never calls a model, so the grid can poll it freely.
+app.get("/api/predictions", (req, res) => {
+  const ids = String(req.query.ids ?? "").split(",").filter(Boolean);
+  res.json({ predictions: ids.length === 0 ? [] : cachedPredictions(ids) });
 });
 
 app.get("/api/leaderboard", async (_req, res) => {
