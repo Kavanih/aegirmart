@@ -158,9 +158,16 @@ app.get("/api/positions", async (req, res) => {
 
     const priced = positions.map((p) => {
       const entry = basis[p.marketId]?.[p.outcomeIndex];
-      const payout = p.finalized && p.winningOutcome === p.outcomeIndex ? p.size : p.finalized ? 0 : null;
+      // Redeeming a winner burns the outcome tokens, so a claimed position has
+      // no balance left. Fall back to what the fills say was bought, otherwise
+      // every win a user actually collected prices as a total loss.
+      const shares = p.size > 0 ? p.size : entry?.shares ?? 0;
+      const won = p.finalized && p.winningOutcome === p.outcomeIndex;
+      const payout = p.finalized ? (won ? shares : 0) : null;
       return {
         ...p,
+        shares,
+        won: p.finalized ? won : null,
         cost: entry?.cost ?? null,
         averagePrice: entry?.averagePrice ?? null,
         pnl: entry && payout !== null ? payout - entry.cost : null,

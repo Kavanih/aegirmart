@@ -89,7 +89,9 @@ export async function recentCloses(asset: string, limit: number): Promise<Candle
   })).filter((c) => Number.isFinite(c.closePrice) && c.closePrice > 0);
 }
 
-// Settled history for the empirical base rate. Outcome 1 means the up side won.
+// Settled history for the empirical base rate. Outcome 0 means the up side won,
+// matching OutcomeBalance where index 0 is the YES/up leg. Verified against 598
+// settled 60s windows by reconstructing spot from the next window's strike.
 export async function settledHistory(asset: string, intervalSec: number, limit: number) {
   const body = JSON.stringify({
     query: `query Settled($venue: String!, $asset: String!, $interval: numeric!, $limit: Int!) {
@@ -113,7 +115,7 @@ export async function settledHistory(asset: string, intervalSec: number, limit: 
     .map((m) => ({
       strike: Number(m.strike) / STRIKE_SCALE,
       expiry: Number(m.expiry),
-      wentUp: m.winningOutcome === 1,
+      wentUp: m.winningOutcome === 0,
     }));
 }
 
@@ -166,6 +168,8 @@ export type Position = {
   size: number;
   finalized: boolean;
   winningOutcome: number | null;
+  /** Settled and already redeemed: the outcome tokens were burned to zero. */
+  claimed: boolean;
 };
 
 const COLLATERAL_SCALE = 1e6;
@@ -184,6 +188,7 @@ function toPosition(row: Record<string, any>): Position {
     size: Number(row.balance) / COLLATERAL_SCALE,
     finalized: Boolean(m.finalized),
     winningOutcome: m.winningOutcome === null || m.winningOutcome === undefined ? null : Number(m.winningOutcome),
+    claimed: Boolean(m.finalized) && Number(row.balance) === 0,
   };
 }
 
@@ -193,7 +198,14 @@ const POSITION_FIELDS = `account balance outcomeIndex tokenId
 export async function positionsFor(address: string, limit: number): Promise<Position[]> {
   const body = JSON.stringify({
     query: `query Positions($account: String!, $limit: Int!) {
-      OutcomeBalance(limit: $limit, where: {account: {_eq: $account}, balance: {_gt: "0"}}, order_by: {balance: desc}) {
+      OutcomeBalance(
+        limit: $limit
+        where: {
+          account: {_eq: $account}
+          _or: [{balance: {_gt: "0"}}, {market: {finalized: {_eq: true}}}]
+        }
+        order_by: {balance: desc}
+      ) {
         ${POSITION_FIELDS}
       }
     }`,
@@ -207,10 +219,12 @@ export async function positionsFor(address: string, limit: number): Promise<Posi
 export type TraderRow = { account: string; settled: number; wins: number; winRate: number; volume: number };
 
 // Ranked from settled positions: a position wins when its outcome is the winner.
+// Claimed positions are included, so win rate counts collected wins. Their size
+// is burned on redemption, so volume reads low for accounts that claim often.
 export async function leaderboard(limit: number): Promise<TraderRow[]> {
   const body = JSON.stringify({
     query: `query Board($limit: Int!) {
-      OutcomeBalance(limit: $limit, where: {balance: {_gt: "0"}, market: {finalized: {_eq: true}}}, order_by: {balance: desc}) {
+      OutcomeBalance(limit: $limit, where: {market: {finalized: {_eq: true}}}, order_by: {balance: desc}) {
         ${POSITION_FIELDS}
       }
     }`,
