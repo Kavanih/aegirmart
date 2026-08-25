@@ -1,0 +1,204 @@
+import { useEffect, useState } from "react";
+import { fetchAccuracy, money, windowLabel, type ModelLatency, type ModelScore, type PredictionRecord } from "./api";
+import { fmt } from "./payout";
+import { TableScroll, TableSkeleton, EmptyState } from "./Table";
+
+function shortModel(id: string): string {
+  return id.replace(/:free$/, "").split("/").pop() ?? id;
+}
+
+function when(seconds: number): string {
+  const delta = Math.floor(Date.now() / 1000) - seconds;
+  if (delta < 60) return `${delta}s ago`;
+  if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
+  return `${Math.floor(delta / 3600)}h ago`;
+}
+
+export function Accuracy() {
+  const [data, setData] = useState<{ records: PredictionRecord[]; models: ModelScore[]; latency: ModelLatency[] } | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () => fetchAccuracy().then((d) => alive && setData(d)).catch(() => alive && setFailed(true));
+    load();
+    const poll = window.setInterval(load, 15_000);
+    return () => {
+      alive = false;
+      window.clearInterval(poll);
+    };
+  }, []);
+
+  if (failed) return <EmptyState title="Scoreboard unavailable" hint="The service did not respond." />;
+
+  if (!data) {
+    return (
+      <div className="page">
+        <div className="page-head">
+          <div>
+            <h2>Model scoreboard</h2>
+            <p>Every prediction is made when the window opens and scored when it settles.</p>
+          </div>
+        </div>
+        <TableSkeleton columns={["Model", "Scored", "Correct", "Accuracy", "Brier"]} />
+      </div>
+    );
+  }
+
+  const scored = data.records.filter((r) => r.correct !== null);
+  const hits = scored.filter((r) => r.correct).length;
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h2>Model scoreboard</h2>
+          <p>Every prediction is made when the window opens and scored when it settles. Last 100 kept.</p>
+        </div>
+      </div>
+
+      <div className="stat-grid">
+        <StatCard label="Scored" value={String(scored.length)} />
+        <StatCard label="Awaiting settlement" value={String(data.records.length - scored.length)} />
+        <StatCard
+          label="Overall accuracy"
+          value={scored.length ? `${Math.round((hits / scored.length) * 100)}%` : "--"}
+          tone={scored.length ? (hits / scored.length >= 0.5 ? "good" : "bad") : undefined}
+        />
+        <StatCard label="Models tried" value={String(data.models.length)} />
+      </div>
+
+      {data.models.length > 0 && (
+        <>
+          <h3 className="section-head">Ranked by accuracy</h3>
+          <TableScroll label="Model rankings">
+            <table className="table">
+            <thead>
+              <tr>
+                <th className="rank">#</th>
+                <th>Model</th>
+                <th className="num">Scored</th>
+                <th className="num">Correct</th>
+                <th className="num">Accuracy</th>
+                <th className="num">Brier</th>
+                <th className="num">Pending</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.models.map((m, i) => (
+                <tr key={m.model}>
+                  <td className="rank">{i + 1}</td>
+                  <td className="model-cell">{shortModel(m.model)}</td>
+                  <td className="num">{m.scored}</td>
+                  <td className="num">{m.correct}</td>
+                  <td className={`num ${m.scored === 0 ? "muted-cell" : m.accuracy >= 0.5 ? "rate-good" : "rate-bad"}`}>
+                    {m.scored ? `${Math.round(m.accuracy * 100)}%` : "--"}
+                  </td>
+                  <td className="num muted-cell">{m.scored ? fmt(m.brier, 3) : "--"}</td>
+                  <td className="num muted-cell">{m.pending}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </TableScroll>
+          <p className="footnote">
+            Brier score is the mean squared error of the probability against the result. Lower is better; 0.25 is what
+            you get by always saying fifty percent.
+          </p>
+        </>
+      )}
+
+      {data.latency?.length > 0 && (
+        <>
+          <h3 className="section-head">Provider speed</h3>
+          <TableScroll label="Provider speed">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Model</th>
+                  <th className="num">Answered</th>
+                  <th className="num">Failed</th>
+                  <th className="num">Avg latency</th>
+                  <th className="num">State</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.latency.map((l) => {
+                  const cooling = l.rateLimitedUntil > Date.now();
+                  return (
+                    <tr key={l.model}>
+                      <td className="model-cell">{shortModel(l.model)}</td>
+                      <td className="num">{l.ok}</td>
+                      <td className="num muted-cell">{l.fail}</td>
+                      <td className="num">{l.ok ? `${(l.avgMs / 1000).toFixed(1)}s` : "--"}</td>
+                      <td className={`num ${cooling ? "rate-bad" : l.ok ? "rate-good" : "muted-cell"}`}>
+                        {cooling ? "cooling off" : l.ok ? "ready" : "untried"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TableScroll>
+          <p className="footnote">
+            Providers are asked fastest first. A model that rate limits is skipped for ninety seconds rather than
+            demoted permanently, so the pool keeps exploring.
+          </p>
+        </>
+      )}
+
+      <h3 className="section-head">Recent predictions</h3>
+      {data.records.length === 0 ? (
+        <EmptyState title="No predictions yet" hint="The tracker predicts each window as it opens. Check back in a minute." />
+      ) : (
+        <TableScroll label="Recent predictions">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Market</th>
+              <th>Called</th>
+              <th className="num">Confidence</th>
+              <th className="num">Outcome</th>
+              <th className="num">Result</th>
+              <th>Model</th>
+              <th className="num">When</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.records.map((r) => (
+              <tr key={r.marketId}>
+                <td>
+                  {r.asset} <span className="market-sub">{windowLabel(r.intervalSec)}</span>
+                  <span className="strike-cell"> ${money(r.strike)}</span>
+                </td>
+                <td>
+                  <span className={`pos-side ${r.side}`}>{r.side.toUpperCase()}</span>
+                  <span className="prob-cell">{Math.round(r.probability * 100)}%</span>
+                </td>
+                <td className="num muted-cell">{r.confidence}</td>
+                <td className="num">
+                  {r.outcome ? <span className={`pos-side ${r.outcome}`}>{r.outcome.toUpperCase()}</span> : <span className="muted-cell">pending</span>}
+                </td>
+                <td className={`num pos-result ${r.correct === null ? "open" : r.correct ? "win" : "loss"}`}>
+                  {r.correct === null ? "--" : r.correct ? "Hit" : "Miss"}
+                </td>
+                <td className="model-cell">{shortModel(r.model)}</td>
+                <td className="num muted-cell">{when(r.predictedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </TableScroll>
+      )}
+    </div>
+  );
+}
+
+function StatCard({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
+  return (
+    <div className="stat-card">
+      <span className="stat-label">{label}</span>
+      <span className={`stat-value ${tone ?? ""}`}>{value}</span>
+    </div>
+  );
+}

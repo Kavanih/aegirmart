@@ -1,0 +1,84 @@
+import { useCallback, useState } from "react";
+import { useAccount, useConfig } from "wagmi";
+import { readContract, writeContract, waitForTransactionReceipt } from "wagmi/actions";
+import { erc20Abi, type Address } from "viem";
+import { somniaTestnet } from "./config";
+import { binaryPoolAbi, planOrder, orderArgs, bidPrice, APPROVE_AMOUNT, type Direction } from "./trade";
+import type { Market } from "../api";
+
+export type TradeState =
+  | { phase: "idle" }
+  | { phase: "approving" }
+  | { phase: "placing" }
+  | { phase: "done"; hash: string; direction: Direction; shares: number; price: number }
+  | { phase: "error"; message: string };
+
+// Contract reverts arrive as long multi-line strings; keep the first line.
+function readableError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  if (/User rejected|denied transaction/i.test(raw)) return "Signature rejected";
+  if (/UseBinaryPlacement/.test(raw)) return "Wrong pool entrypoint for this market";
+  if (/InvalidPrice/.test(raw)) return "Price is off the tick grid";
+  if (/ERC20InsufficientBalance|transfer amount exceeds/i.test(raw)) return "Not enough tUSDC";
+  return raw.split("\n")[0].slice(0, 140);
+}
+
+export function useTrade() {
+  const { address, chainId } = useAccount();
+  const config = useConfig();
+  const [state, setState] = useState<TradeState>({ phase: "idle" });
+
+  const reset = useCallback(() => setState({ phase: "idle" }), []);
+
+  const place = useCallback(
+    async (market: Market, direction: Direction, stake: number, modelProbability: number | null = null) => {
+      if (!address) return setState({ phase: "error", message: "Connect a wallet first" });
+      if (chainId !== somniaTestnet.id) return setState({ phase: "error", message: "Switch to Somnia testnet" });
+
+      const plan = planOrder(market, direction, stake, bidPrice(direction, modelProbability));
+      if (!plan) return setState({ phase: "error", message: "Window closed before the order could be built" });
+
+      try {
+        const allowance = await readContract(config, {
+          abi: erc20Abi,
+          address: plan.collateral,
+          functionName: "allowance",
+          args: [address, plan.pool],
+        });
+
+        // Approve once per pool. Pools are recycled per window, so this recurs.
+        if (allowance < plan.escrow) {
+          setState({ phase: "approving" });
+          const approveHash = await writeContract(config, {
+            abi: erc20Abi,
+            address: plan.collateral,
+            functionName: "approve",
+            args: [plan.pool as Address, APPROVE_AMOUNT],
+          });
+          await waitForTransactionReceipt(config, { hash: approveHash });
+        }
+
+        setState({ phase: "placing" });
+        const hash = await writeContract(config, {
+          abi: binaryPoolAbi,
+          address: plan.pool,
+          functionName: "placeBinaryOrder",
+          args: orderArgs(plan),
+        });
+
+        // A reverted binary write does not always throw, so check the receipt.
+        const receipt = await waitForTransactionReceipt(config, { hash });
+        if (receipt.status !== "success") {
+          return setState({ phase: "error", message: "Order reverted on chain" });
+        }
+
+        setState({ phase: "done", hash, direction, shares: plan.shares, price: plan.limitPrice });
+      } catch (err) {
+        setState({ phase: "error", message: readableError(err) });
+      }
+    },
+    [address, chainId, config],
+  );
+
+  return { state, place, reset };
+}

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+likes.json
+predictions.json
+model-stats.json
+quota.json
+*.tsbuildinfo

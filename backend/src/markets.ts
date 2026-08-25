@@ -1,0 +1,260 @@
+const GRAPHQL = process.env.SOMNIA_GRAPHQL ?? "https://dev.smk.somnia.host/v1/graphql";
+const VENUE_ID = process.env.VENUE_ID ?? "0x1a1e6821cde7d0159c0d293177871e09677b4e42307c7db3ba94f8648a5a050f";
+
+// Strikes arrive as integer cents against the underlying pair.
+const STRIKE_SCALE = 100;
+// Book prices arrive in raw collateral units; a binary price is a probability.
+const PRICE_SCALE = 1e6;
+
+export type Market = {
+  marketId: string;
+  asset: string;
+  strike: number;
+  expiry: number;
+  intervalSec: number;
+  lastPrice: number | null;
+  tradeCount: number;
+  poolAddress: string;
+  collateral: string;
+};
+
+export type Candle = { bucketStart: number; closePrice: number };
+
+async function query<T>(body: string): Promise<T> {
+  const res = await fetch(GRAPHQL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+  });
+  if (!res.ok) throw new Error(`indexer ${res.status}`);
+  const json = (await res.json()) as { data?: T; errors?: unknown };
+  if (!json.data) throw new Error(`indexer returned no data: ${JSON.stringify(json.errors)}`);
+  return json.data;
+}
+
+function toMarket(row: Record<string, string | null>): Market {
+  return {
+    marketId: String(row.marketId),
+    asset: String(row.asset),
+    strike: Number(row.strike) / STRIKE_SCALE,
+    expiry: Number(row.expiry),
+    intervalSec: Number(row.intervalSec),
+    lastPrice: row.lastPrice === null ? null : Number(row.lastPrice) / PRICE_SCALE,
+    tradeCount: Number(row.tradeCount ?? 0),
+    poolAddress: String(row.poolAddress ?? ""),
+    collateral: String(row.collateral ?? ""),
+  };
+}
+
+// The indexer carries dead rows from retired venues, so gate on venue,
+// a future expiry, and a real strike rather than trusting clobStatus alone.
+export async function liveMarkets(intervalSec: number, headroomSec: number): Promise<Market[]> {
+  const now = Math.floor(Date.now() / 1000);
+  const floor = now + headroomSec;
+
+  const body = JSON.stringify({
+    query: `query Live($venue: String!, $floor: numeric!, $interval: numeric!) {
+      Market(
+        limit: 20
+        where: {
+          venueId: {_eq: $venue}
+          clobStatus: {_eq: "Trading"}
+          expiry: {_gt: $floor}
+          intervalSec: {_eq: $interval}
+        }
+        order_by: {expiry: asc}
+      ) { marketId asset strike expiry intervalSec lastPrice tradeCount poolAddress collateral }
+    }`,
+    variables: { venue: VENUE_ID, floor: String(floor), interval: String(intervalSec) },
+  });
+
+  const data = await query<{ Market: Record<string, string | null>[] }>(body);
+  return data.Market.map(toMarket).filter((m) => m.strike > 0);
+}
+
+export async function recentCloses(asset: string, limit: number): Promise<Candle[]> {
+  const body = JSON.stringify({
+    query: `query Closes($limit: Int!) {
+      Candle(limit: $limit, order_by: {bucketStart: desc}, where: {intervalSeconds: {_eq: 60}}) {
+        bucketStart closePrice
+      }
+    }`,
+    variables: { limit },
+  });
+
+  const data = await query<{ Candle: Record<string, string>[] }>(body);
+  return data.Candle.map((c) => ({
+    bucketStart: Number(c.bucketStart),
+    closePrice: Number(c.closePrice),
+  })).filter((c) => Number.isFinite(c.closePrice) && c.closePrice > 0);
+}
+
+// Settled history for the empirical base rate. Outcome 1 means the up side won.
+export async function settledHistory(asset: string, intervalSec: number, limit: number) {
+  const body = JSON.stringify({
+    query: `query Settled($venue: String!, $asset: String!, $interval: numeric!, $limit: Int!) {
+      Market(
+        limit: $limit
+        where: {
+          venueId: {_eq: $venue}
+          asset: {_eq: $asset}
+          intervalSec: {_eq: $interval}
+          finalized: {_eq: true}
+        }
+        order_by: {expiry: desc}
+      ) { strike expiry winningOutcome }
+    }`,
+    variables: { venue: VENUE_ID, asset, interval: String(intervalSec), limit },
+  });
+
+  const data = await query<{ Market: { strike: string; expiry: string; winningOutcome: number | null }[] }>(body);
+  return data.Market
+    .filter((m) => m.winningOutcome !== null && Number(m.strike) > 0)
+    .map((m) => ({
+      strike: Number(m.strike) / STRIKE_SCALE,
+      expiry: Number(m.expiry),
+      wentUp: m.winningOutcome === 1,
+    }));
+}
+
+export type PricePoint = { t: number; price: number };
+
+// Each window mints at the money, so the strike history is a price series.
+export async function strikeSeries(asset: string, limit: number): Promise<PricePoint[]> {
+  const body = JSON.stringify({
+    query: `query Series($venue: String!, $asset: String!, $limit: Int!) {
+      Market(
+        limit: $limit
+        where: {venueId: {_eq: $venue}, asset: {_eq: $asset}, intervalSec: {_eq: "60"}, strike: {_gt: "0"}}
+        order_by: {expiry: desc}
+      ) { expiry strike }
+    }`,
+    variables: { venue: VENUE_ID, asset, limit },
+  });
+
+  const data = await query<{ Market: { expiry: string; strike: string }[] }>(body);
+  return data.Market
+    .map((m) => ({ t: Number(m.expiry), price: Number(m.strike) / STRIKE_SCALE }))
+    .reverse();
+}
+
+// Latest strike doubles as a spot reference: the venue mints it at the money.
+export async function spotReference(asset: string): Promise<number | null> {
+  const body = JSON.stringify({
+    query: `query Spot($venue: String!, $asset: String!) {
+      Market(limit: 1, where: {venueId: {_eq: $venue}, asset: {_eq: $asset}, strike: {_gt: "0"}}, order_by: {expiry: desc}) {
+        strike
+      }
+    }`,
+    variables: { venue: VENUE_ID, asset },
+  });
+
+  const data = await query<{ Market: { strike: string }[] }>(body);
+  const row = data.Market[0];
+  return row ? Number(row.strike) / STRIKE_SCALE : null;
+}
+
+export type Position = {
+  marketId: string;
+  poolAddress: string;
+  outcomeId: string;
+  asset: string;
+  intervalSec: number;
+  strike: number;
+  expiry: number;
+  outcomeIndex: number;
+  size: number;
+  finalized: boolean;
+  winningOutcome: number | null;
+};
+
+const COLLATERAL_SCALE = 1e6;
+
+function toPosition(row: Record<string, any>): Position {
+  const m = row.market ?? {};
+  return {
+    marketId: String(m.marketId ?? ""),
+    poolAddress: String(m.poolAddress ?? ""),
+    outcomeId: String(row.tokenId ?? ""),
+    asset: String(m.asset ?? ""),
+    intervalSec: Number(m.intervalSec ?? 0),
+    strike: Number(m.strike ?? 0) / STRIKE_SCALE,
+    expiry: Number(m.expiry ?? 0),
+    outcomeIndex: Number(row.outcomeIndex),
+    size: Number(row.balance) / COLLATERAL_SCALE,
+    finalized: Boolean(m.finalized),
+    winningOutcome: m.winningOutcome === null || m.winningOutcome === undefined ? null : Number(m.winningOutcome),
+  };
+}
+
+const POSITION_FIELDS = `account balance outcomeIndex tokenId
+  market { marketId asset intervalSec strike expiry finalized winningOutcome poolAddress yesTokenId noTokenId }`;
+
+export async function positionsFor(address: string, limit: number): Promise<Position[]> {
+  const body = JSON.stringify({
+    query: `query Positions($account: String!, $limit: Int!) {
+      OutcomeBalance(limit: $limit, where: {account: {_eq: $account}, balance: {_gt: "0"}}, order_by: {balance: desc}) {
+        ${POSITION_FIELDS}
+      }
+    }`,
+    variables: { account: address.toLowerCase(), limit },
+  });
+
+  const data = await query<{ OutcomeBalance: Record<string, any>[] }>(body);
+  return data.OutcomeBalance.map(toPosition).filter((p) => p.marketId);
+}
+
+export type TraderRow = { account: string; settled: number; wins: number; winRate: number; volume: number };
+
+// Ranked from settled positions: a position wins when its outcome is the winner.
+export async function leaderboard(limit: number): Promise<TraderRow[]> {
+  const body = JSON.stringify({
+    query: `query Board($limit: Int!) {
+      OutcomeBalance(limit: $limit, where: {balance: {_gt: "0"}, market: {finalized: {_eq: true}}}, order_by: {balance: desc}) {
+        ${POSITION_FIELDS}
+      }
+    }`,
+    variables: { limit },
+  });
+
+  const data = await query<{ OutcomeBalance: Record<string, any>[] }>(body);
+  const byAccount = new Map<string, TraderRow>();
+
+  for (const row of data.OutcomeBalance) {
+    const p = toPosition(row);
+    if (p.winningOutcome === null) continue;
+
+    const account = String(row.account);
+    const entry = byAccount.get(account) ?? { account, settled: 0, wins: 0, winRate: 0, volume: 0 };
+    entry.settled += 1;
+    entry.volume += p.size;
+    if (p.outcomeIndex === p.winningOutcome) entry.wins += 1;
+    byAccount.set(account, entry);
+  }
+
+  return [...byAccount.values()]
+    .map((r) => ({ ...r, winRate: r.settled ? r.wins / r.settled : 0 }))
+    .sort((a, b) => b.wins - a.wins || b.volume - a.volume)
+    .slice(0, 50);
+}
+
+/** Winning outcome index per marketId, for scoring settled predictions. */
+export async function settledOutcomes(marketIds: string[]): Promise<Map<string, number>> {
+  if (marketIds.length === 0) return new Map();
+
+  const body = JSON.stringify({
+    query: `query Outcomes($ids: [String!]!) {
+      Market(where: {marketId: {_in: $ids}, finalized: {_eq: true}}) {
+        marketId winningOutcome
+      }
+    }`,
+    variables: { ids: marketIds },
+  });
+
+  const data = await query<{ Market: { marketId: string; winningOutcome: number | null }[] }>(body);
+  const out = new Map<string, number>();
+  for (const row of data.Market) {
+    if (row.winningOutcome !== null) out.set(row.marketId, Number(row.winningOutcome));
+  }
+  return out;
+}
