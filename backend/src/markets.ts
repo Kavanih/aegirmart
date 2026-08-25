@@ -195,6 +195,53 @@ function toPosition(row: Record<string, any>): Position {
 const POSITION_FIELDS = `account balance outcomeIndex tokenId
   market { marketId asset intervalSec strike expiry finalized winningOutcome poolAddress yesTokenId noTokenId }`;
 
+export type SettledMarket = {
+  marketId: string;
+  asset: string;
+  strike: number;
+  expiry: number;
+  intervalSec: number;
+  /** True when the up side resolved. Outcome 0 is up, verified on chain. */
+  wentUp: boolean;
+  lastPrice: number | null;
+  tradeCount: number;
+};
+
+/**
+ * Recently resolved windows across every lane, newest first. Read only: the
+ * landing page shows these as history, so nothing here is tradeable.
+ */
+export async function settledMarkets(limit: number): Promise<SettledMarket[]> {
+  const body = JSON.stringify({
+    query: `query Settled($venue: String!, $limit: Int!) {
+      Market(
+        limit: $limit
+        where: {
+          venueId: {_eq: $venue}
+          finalized: {_eq: true}
+          strike: {_gt: "0"}
+        }
+        order_by: {expiry: desc}
+      ) { marketId asset strike expiry intervalSec winningOutcome lastPrice tradeCount }
+    }`,
+    variables: { venue: VENUE_ID, limit },
+  });
+
+  const data = await query<{ Market: Record<string, string | null>[] }>(body);
+  return data.Market
+    .filter((m) => m.winningOutcome !== null)
+    .map((m) => ({
+      marketId: String(m.marketId),
+      asset: String(m.asset),
+      strike: Number(m.strike) / STRIKE_SCALE,
+      expiry: Number(m.expiry),
+      intervalSec: Number(m.intervalSec),
+      wentUp: Number(m.winningOutcome) === 0,
+      lastPrice: m.lastPrice === null ? null : Number(m.lastPrice) / PRICE_SCALE,
+      tradeCount: Number(m.tradeCount ?? 0),
+    }));
+}
+
 export async function positionsFor(address: string, limit: number): Promise<Position[]> {
   const body = JSON.stringify({
     query: `query Positions($account: String!, $limit: Int!) {

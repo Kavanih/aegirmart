@@ -705,3 +705,39 @@ button { font: inherit; }
 button.logo { background: none; border: none; padding: 0; cursor: pointer; }
 button.logo:hover .wordmark { color: var(--accent); }
 button.logo:hover .wordmark span { color: var(--text); }
+
+
+/* ---- Recently settled ---- */
+/* Closed windows. Read only by design: an outcome where a live card carries
+   its Up and Down controls, so the two can never be confused at a glance. */
+.settled-section { margin-top: 34px; }
+.settled-note { font-size: 11.5px; color: var(--muted); }
+
+.settled-grid { display: grid; gap: 10px; margin-top: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); }
+
+.settled-tile { display: flex; flex-direction: column; gap: 8px; padding: 12px 13px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 11px; }
+.settled-tile header { display: flex; align-items: center; gap: 8px; }
+.settled-window { font-size: 11px; color: var(--muted); }
+.settled-out { margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: 0.07em;
+  padding: 3px 8px; border-radius: 999px; }
+.settled-out.up { background: var(--up-bg); color: var(--up-fg); border: 1px solid var(--up-line); }
+.settled-out.down { background: var(--down-bg); color: var(--down-fg); border: 1px solid var(--down-line); }
+
+.settled-target { margin: 0; font-size: 12.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums; }
+
+.settled-tile footer { display: flex; justify-content: space-between; align-items: center;
+  gap: 8px; font-size: 10.5px; color: var(--muted); border-top: 1px solid var(--line);
+  padding-top: 8px; }
+.settled-model { font-weight: 600; }
+.settled-model.hit { color: var(--conf-high); }
+.settled-model.miss { color: var(--down); }
+.settled-model.idle { opacity: 0.65; }
+
+.settled-tile.is-loading { height: 104px; background: var(--surface-2); border-style: dashed; }
+
+@media (max-width: 520px) {
+  .settled-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}

@@ -3,6 +3,7 @@ import { useAccount } from "wagmi";
 import { cents, countdown, fetchLikes, fetchMarkets, fetchPredictions, money, title, toggleLike, windowLabel, type Deck, type Like, type Market, type PredictionRecord, type PricePoint } from "./api";
 import { ProbabilityRing } from "./ProbabilityRing";
 import { Sparkline } from "./Sparkline";
+import { Settled } from "./Settled";
 
 const LANES = [60, 300];
 
@@ -204,6 +205,8 @@ export function MarketGrid({ onSwipe }: Props) {
           })}
         </div>
       )}
+
+      <Settled now={now} />
     </div>
   );
 }

@@ -130,6 +130,36 @@ export function shortAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+export type SettledMarket = {
+  marketId: string;
+  asset: string;
+  strike: number;
+  expiry: number;
+  intervalSec: number;
+  wentUp: boolean;
+  lastPrice: number | null;
+  tradeCount: number;
+  modelProbability: number | null;
+  modelSide: "up" | "down" | null;
+  /** Null when the model never read this window, which is not the same as wrong. */
+  modelCorrect: boolean | null;
+};
+
+export async function fetchSettled(limit = 30): Promise<SettledMarket[]> {
+  const res = await fetch(`/api/settled?limit=${limit}`);
+  if (!res.ok) return [];
+  return ((await res.json()) as { settled: SettledMarket[] }).settled;
+}
+
+/** Compact relative age, so a strip of results reads at a glance. */
+export function ago(expiry: number, now: number): string {
+  const secs = Math.max(0, now - expiry);
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.floor(mins / 60)}h ago`;
+}
+
 /**
  * Reads the tracker's stored predictions. Costs nothing against the model
  * allowance, so the grid can poll it as often as it polls markets.

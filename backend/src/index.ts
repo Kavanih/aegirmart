@@ -1,6 +1,6 @@
 import "dotenv/config";
 import express from "express";
-import { liveMarkets, strikeSeries, positionsFor, leaderboard } from "./markets.js";
+import { liveMarkets, strikeSeries, positionsFor, leaderboard, settledMarkets } from "./markets.js";
 import { likesFor, toggleLike } from "./social.js";
 import { costBasisFor, type BasisIndex } from "./fills.js";
 import { startTracker, allRecords, modelScores, cachedPrediction, cachedPredictions } from "./tracker.js";
@@ -18,6 +18,7 @@ const API_KEY = process.env.OPENROUTER_API_KEY ?? "";
 const narratives = new TtlCache<PredictionResult>();
 const seriesCache = new TtlCache<{ t: number; price: number }[]>();
 const boardCache = new TtlCache<unknown>();
+const settledCache = new TtlCache<Awaited<ReturnType<typeof settledMarkets>>>();
 const limiter = new RateLimiter(20, 3000);
 
 const app = express();
@@ -125,6 +126,34 @@ app.post("/api/prediction", async (req, res) => {
     });
   } catch (err) {
     res.json({ status: "unavailable", reason: (err as Error).message });
+  }
+});
+
+/**
+ * Resolved windows for the landing page, joined to whatever the model said at
+ * the time. Cached: this is history, so it only changes when a window settles.
+ */
+app.get("/api/settled", async (req, res) => {
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit ?? 30)));
+  try {
+    const rows = await settledCache.resolve(`settled:${limit}`, 20_000, () => settledMarkets(limit));
+    const reads = new Map(cachedPredictions(rows.map((r) => r.marketId)).map((p) => [p.marketId, p]));
+
+    res.json({
+      settled: rows.map((row) => {
+        const read = reads.get(row.marketId);
+        return {
+          ...row,
+          // Null when the model never got to this window, which is not the
+          // same as the model having been wrong about it.
+          modelProbability: read?.probability ?? null,
+          modelSide: read?.side ?? null,
+          modelCorrect: read ? read.side === (row.wentUp ? "up" : "down") : null,
+        };
+      }),
+    });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message, settled: [] });
   }
 });
 
