@@ -274,9 +274,9 @@ export async function predict(evidence: Evidence, apiKey: string, budgetMs = 45_
     return { status: "unavailable", reason: (err as Error).message };
   }
 
-  // Free models rate limit upstream constantly, so walk EVERY zero priced model
-  // in rank order rather than giving up after a handful. A model that answers
-  // 429 is skipped immediately; the ranking just decides who gets asked first.
+  // Walk the top ranked models in order, not the whole catalog: the daily cap is
+  // per account, so a fifth attempt after four failures costs a request that a
+  // later card will need. A model that answers 429 is skipped immediately.
   let lastReason = "no free model returned valid JSON";
   const secondPass: string[] = [];
 
