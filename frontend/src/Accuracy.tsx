@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { fetchAccuracy, money, windowLabel, type ModelLatency, type ModelScore, type PredictionRecord } from "./api";
+import { fetchAccuracy, fetchHealth, money, windowLabel, type Health, type ModelLatency, type ModelScore, type PredictionRecord } from "./api";
 import { fmt } from "./payout";
 import { TableScroll, TableSkeleton, EmptyState } from "./Table";
+import { AssetMark } from "./AssetMark";
 
 function shortModel(id: string): string {
   return id.replace(/:free$/, "").split("/").pop() ?? id;
@@ -17,10 +18,14 @@ function when(seconds: number): string {
 export function Accuracy() {
   const [data, setData] = useState<{ records: PredictionRecord[]; models: ModelScore[]; latency: ModelLatency[] } | null>(null);
   const [failed, setFailed] = useState(false);
+  const [health, setHealth] = useState<Health | null>(null);
 
   useEffect(() => {
     let alive = true;
-    const load = () => fetchAccuracy().then((d) => alive && setData(d)).catch(() => alive && setFailed(true));
+    const load = () => {
+      fetchHealth().then((h) => alive && setHealth(h)).catch(() => undefined);
+      return fetchAccuracy().then((d) => alive && setData(d)).catch(() => alive && setFailed(true));
+    };
     load();
     const poll = window.setInterval(load, 15_000);
     return () => {
@@ -48,6 +53,12 @@ export function Accuracy() {
   const scored = data.records.filter((r) => r.correct !== null);
   const hits = scored.filter((r) => r.correct).length;
 
+  // A model that has never been asked has no speed to report. Listing it puts
+  // rows of zeroes above the models that actually have a record.
+  const latency = data.latency ?? [];
+  const called = latency.filter((l) => l.ok + l.fail > 0);
+  const untried = latency.length - called.length;
+
   return (
     <div className="page">
       <div className="page-head">
@@ -66,6 +77,13 @@ export function Accuracy() {
           tone={scored.length ? (hits / scored.length >= 0.5 ? "good" : "bad") : undefined}
         />
         <StatCard label="Models tried" value={String(data.models.length)} />
+        {health && (
+          <StatCard
+            label="Free allowance"
+            value={`${health.freeQuota.remaining}/${health.freeQuota.limit}`}
+            tone={health.freeQuota.remaining === 0 ? "bad" : undefined}
+          />
+        )}
       </div>
 
       {data.models.length > 0 && (
@@ -108,7 +126,7 @@ export function Accuracy() {
         </>
       )}
 
-      {data.latency?.length > 0 && (
+      {called.length > 0 && (
         <>
           <h3 className="section-head">Provider speed</h3>
           <TableScroll label="Provider speed">
@@ -123,7 +141,7 @@ export function Accuracy() {
                 </tr>
               </thead>
               <tbody>
-                {data.latency.map((l) => {
+                {called.map((l) => {
                   const cooling = l.rateLimitedUntil > Date.now();
                   return (
                     <tr key={l.model}>
@@ -141,15 +159,25 @@ export function Accuracy() {
             </table>
           </TableScroll>
           <p className="footnote">
-            Providers are asked fastest first. A model that rate limits is skipped for ninety seconds rather than
+            Providers are asked fastest first. A model that rate limits is skipped for five minutes rather than
             demoted permanently, so the pool keeps exploring.
+            {untried > 0 && ` ${untried} more ${untried === 1 ? "model has" : "models have"} not been called yet.`}
           </p>
         </>
       )}
 
       <h3 className="section-head">Recent predictions</h3>
       {data.records.length === 0 ? (
-        <EmptyState title="No predictions yet" hint="The tracker predicts each window as it opens. Check back in a minute." />
+        <EmptyState
+          title="No predictions yet"
+          hint={
+            health && health.freeQuota.remaining === 0
+              ? "The day's free model allowance is spent, so the tracker is not reading new windows. It resumes when the allowance resets at 00:00 UTC."
+              : health && !health.keyConfigured
+                ? "No model key is configured, so the tracker cannot read a window."
+                : "The tracker predicts each window as it opens. Check back in a minute."
+          }
+        />
       ) : (
         <TableScroll label="Recent predictions">
         <table className="table">
@@ -168,8 +196,11 @@ export function Accuracy() {
             {data.records.map((r) => (
               <tr key={r.marketId}>
                 <td>
-                  {r.asset} <span className="market-sub">{windowLabel(r.intervalSec)}</span>
-                  <span className="strike-cell"> ${money(r.strike)}</span>
+                  <span className="asset-cell">
+                    <AssetMark asset={r.asset} size={18} />
+                    {r.asset} <span className="market-sub">{windowLabel(r.intervalSec)}</span>
+                    <span className="strike-cell">${money(r.strike)}</span>
+                  </span>
                 </td>
                 <td>
                   <span className={`pos-side ${r.side}`}>{r.side.toUpperCase()}</span>

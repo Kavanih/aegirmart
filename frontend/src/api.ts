@@ -131,6 +131,18 @@ export function shortAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+export type Health = {
+  ok: boolean;
+  keyConfigured: boolean;
+  freeQuota: { limit: number; spent: number; remaining: number };
+};
+
+export async function fetchHealth(): Promise<Health | null> {
+  const res = await fetch("/api/health");
+  if (!res.ok) return null;
+  return (await res.json()) as Health;
+}
+
 export type SettledMarket = {
   marketId: string;
   asset: string;

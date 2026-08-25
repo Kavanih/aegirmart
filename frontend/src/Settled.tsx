@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ago, cents, fetchSettled, money, title, windowLabel, type PricePoint, type SettledMarket } from "./api";
 import { Sparkline } from "./Sparkline";
+import { AssetMark } from "./AssetMark";
 
 type Props = { now: number };
 
@@ -70,7 +71,7 @@ export function Settled({ now }: Props) {
             return (
               <article key={row.marketId} className="market-card settled-card">
                 <header>
-                  <span className={`token ${row.asset.toLowerCase()}`}>{row.asset}</span>
+                  <AssetMark asset={row.asset} />
                   <div className="market-title">
                     <h4>{title(row)}</h4>
                     <span className="market-sub">{windowLabel(row.intervalSec)} · {ago(row.expiry, now)}</span>

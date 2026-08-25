@@ -3,6 +3,7 @@ import { useAccount } from "wagmi";
 import { cents, countdown, fetchLikes, fetchMarkets, fetchPredictions, money, title, toggleLike, windowLabel, type Deck, type Like, type Market, type PredictionRecord, type PricePoint } from "./api";
 import { ProbabilityRing } from "./ProbabilityRing";
 import { Sparkline } from "./Sparkline";
+import { AssetMark } from "./AssetMark";
 import { Settled } from "./Settled";
 import { Hero } from "./Hero";
 
@@ -111,7 +112,7 @@ export function MarketGrid({ onSwipe }: Props) {
             return (
               <article key={market.marketId} className="market-card">
                 <header>
-                  <span className={`token ${market.asset.toLowerCase()}`}>{market.asset}</span>
+                  <AssetMark asset={market.asset} />
                   <div className="market-title">
                     <h4>{title(market)}</h4>
                     <span className="market-sub">{windowLabel(market.intervalSec)}</span>

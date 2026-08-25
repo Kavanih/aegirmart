@@ -475,8 +475,13 @@ body {
   padding: 15px; display: flex; flex-direction: column; gap: 11px; }
 .market-card:hover { border-color: var(--hover-line); }
 .market-card header { display: flex; align-items: center; gap: 11px; }
-.token { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+/* Size comes from the component so one badge can serve cards and rows alike;
+   the icon inherits currentColor, which is what tints it per asset. */
+.token { border-radius: 50%; display: grid; place-items: center;
   font-size: 10px; font-weight: 700; letter-spacing: 0.02em; flex-shrink: 0; }
+.token svg { display: block; }
+/* Keeps the mark, symbol and window on one baseline inside a table row. */
+.asset-cell { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 .token.btc { background: var(--btc-bg); color: var(--btc-fg); }
 .token.eth { background: var(--eth-bg); color: var(--eth-fg); }
 .market-title { flex: 1; min-width: 0; }

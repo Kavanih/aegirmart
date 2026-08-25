@@ -5,6 +5,7 @@ import { useClaim } from "./wallet/useClaim";
 import { fmt, PAYOUT_PER_SHARE } from "./payout";
 import { useToast } from "./Toast";
 import { TableScroll, TableSkeleton, EmptyState } from "./Table";
+import { AssetMark } from "./AssetMark";
 
 const TABS = ["Positions", "History", "Activity"] as const;
 type Tab = (typeof TABS)[number];
@@ -174,7 +175,10 @@ export function Portfolio() {
                 return (
                   <tr key={`${position.marketId}-${position.outcomeIndex}`}>
                     <td>
-                      {position.asset} <span className="market-sub">{windowLabel(position.intervalSec)}</span>
+                      <span className="asset-cell">
+                        <AssetMark asset={position.asset} size={18} />
+                        {position.asset} <span className="market-sub">{windowLabel(position.intervalSec)}</span>
+                      </span>
                     </td>
                     <td>
                       <span className={`pos-side ${position.outcomeIndex === 0 ? "up" : "down"}`}>
