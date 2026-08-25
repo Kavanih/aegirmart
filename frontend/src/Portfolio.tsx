@@ -12,6 +12,11 @@ type AssetFilter = "All" | "BTC" | "ETH";
 
 const EXPLORER = "https://shannon-explorer.somnia.network/tx";
 
+/** Shares to price against: a redeemed win has no balance left to read. */
+function sharesOf(position: Position): number {
+  return position.size > 0 ? position.size : position.shares ?? 0;
+}
+
 function outcomeOf(position: Position) {
   if (!position.finalized || position.winningOutcome === null) return "open" as const;
   return position.outcomeIndex === position.winningOutcome ? ("won" as const) : ("lost" as const);
@@ -50,12 +55,13 @@ export function Portfolio() {
     const rows = positions ?? [];
     const settled = rows.filter((p) => outcomeOf(p) !== "open");
     const won = settled.filter((p) => outcomeOf(p) === "won");
-    const claimable = won.filter((p) => !claimed.has(p.outcomeId));
+    // Already redeemed on chain, or redeemed in this session: not claimable.
+    const claimable = won.filter((p) => !p.claimed && !claimed.has(p.outcomeId));
     return {
       open: rows.filter((p) => outcomeOf(p) === "open").length,
       settled: settled.length,
       winRate: settled.length ? won.length / settled.length : 0,
-      claimable: claimable.reduce((sum, p) => sum + p.size * PAYOUT_PER_SHARE, 0),
+      claimable: claimable.reduce((sum, p) => sum + sharesOf(p) * PAYOUT_PER_SHARE, 0),
       realised: settled.reduce((sum, p) => sum + (p.pnl ?? 0), 0),
       staked: rows.reduce((sum, p) => sum + (p.cost ?? 0), 0),
       atRisk: rows.filter((p) => outcomeOf(p) === "open").reduce((sum, p) => sum + p.size * PAYOUT_PER_SHARE, 0),
@@ -72,10 +78,10 @@ export function Portfolio() {
 
   const onClaim = (position: Position) => {
     const id = toast.push("pending", `Claiming ${position.asset} ${position.outcomeIndex === 0 ? "UP" : "DOWN"}`);
-    claim(position.poolAddress, position.outcomeId, position.size, (phase, detail) => {
+    claim(position.poolAddress, position.outcomeId, sharesOf(position), (phase, detail) => {
       if (phase === "sent") toast.update(id, "pending", "Waiting for confirmation", `${EXPLORER}/${detail}`);
       else if (phase === "done") {
-        toast.update(id, "success", `Claimed ${position.size.toFixed(2)} ${position.asset}`, `${EXPLORER}/${detail}`);
+        toast.update(id, "success", `Claimed ${sharesOf(position).toFixed(2)} ${position.asset}`, `${EXPLORER}/${detail}`);
         setClaimed((prev) => new Set(prev).add(position.outcomeId));
         load();
       } else toast.update(id, "error", detail);
@@ -163,7 +169,7 @@ export function Portfolio() {
             <tbody>
               {filtered.map((position) => {
                 const outcome = outcomeOf(position);
-                const isClaimed = claimed.has(position.outcomeId);
+                const isClaimed = position.claimed || claimed.has(position.outcomeId);
                 const busy = claiming === position.outcomeId;
                 return (
                   <tr key={`${position.marketId}-${position.outcomeIndex}`}>
@@ -176,13 +182,13 @@ export function Portfolio() {
                       </span>
                     </td>
                     <td className="num">${money(position.strike)}</td>
-                    <td className="num">{fmt(position.size)}</td>
+                    <td className="num">{fmt(sharesOf(position))}</td>
                     <td className="num muted-cell">
                       {position.averagePrice === null ? "--" : `${Math.round(position.averagePrice * 100)}c`}
                     </td>
                     <td className="num">{position.cost === null ? "--" : fmt(position.cost)}</td>
                     <td className={`num ${outcome === "lost" ? "muted-cell" : ""}`}>
-                      {outcome === "lost" ? "0.00" : fmt(position.size * PAYOUT_PER_SHARE)}
+                      {outcome === "lost" ? "0.00" : fmt(sharesOf(position) * PAYOUT_PER_SHARE)}
                     </td>
                     <td className={`num pnl ${position.pnl === null ? "" : position.pnl >= 0 ? "win" : "loss"}`}>
                       {position.pnl === null ? "--" : `${position.pnl >= 0 ? "+" : ""}${fmt(position.pnl)}`}

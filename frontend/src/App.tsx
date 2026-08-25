@@ -4,7 +4,8 @@ import { MarketGrid } from "./MarketGrid";
 import { Leaderboard } from "./Leaderboard";
 import { Portfolio } from "./Portfolio";
 import { Accuracy } from "./Accuracy";
-import { Logo } from "./Logo";
+import { Sidebar, type View } from "./Sidebar";
+import { ThemeToggle } from "./Theme";
 import { ConnectWallet } from "./wallet/ConnectWallet";
 import "./styles.css";
 
@@ -13,76 +14,78 @@ const LANES = [
   { label: "1 min", intervalSec: 60 },
 ];
 
-type View = "markets" | "swipe" | "accuracy" | "leaderboard" | "portfolio";
-
-const TABS: { id: View; label: string }[] = [
-  { id: "markets", label: "Markets" },
-  { id: "swipe", label: "Swipe" },
-  { id: "accuracy", label: "AI Scoreboard" },
-  { id: "leaderboard", label: "Leaderboard" },
-  { id: "portfolio", label: "Portfolio" },
-];
+const HEADING: Record<View, string> = {
+  markets: "Markets",
+  swipe: "Swipe",
+  accuracy: "AI Scoreboard",
+  leaderboard: "Leaderboard",
+  portfolio: "Positions",
+};
 
 export function App() {
   const [view, setView] = useState<View>("markets");
   const [intervalSec, setIntervalSec] = useState(LANES[0].intervalSec);
+  const [navOpen, setNavOpen] = useState(false);
 
   const openSwipe = (lane: number) => {
     setIntervalSec(lane);
     setView("swipe");
   };
 
+  const select = (next: View) => {
+    setView(next);
+    setNavOpen(false);
+  };
+
   return (
-    <div className="shell">
-      <header className="topbar">
-        <div className="topbar-inner">
-          <Logo onClick={() => setView("markets")} />
-          <nav className="tabs" aria-label="Sections">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                className={view === tab.id ? "tab on" : "tab"}
-                aria-pressed={view === tab.id}
-                onClick={() => setView(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-          <ConnectWallet />
-        </div>
-      </header>
+    <div className={navOpen ? "shell nav-open" : "shell"}>
+      <Sidebar view={view} onSelect={select} />
 
-      <main className={view === "swipe" ? "main narrow" : "main"}>
-        {view === "markets" && <MarketGrid onSwipe={openSwipe} />}
-        {view === "accuracy" && <Accuracy />}
-        {view === "leaderboard" && <Leaderboard />}
-        {view === "portfolio" && <Portfolio />}
-        {view === "swipe" && (
-          <>
-            <div className="lane-row">
-              <nav className="lanes" aria-label="Contract window">
-                {LANES.map((lane) => (
-                  <button
-                    key={lane.intervalSec}
-                    className={lane.intervalSec === intervalSec ? "lane on" : "lane"}
-                    aria-pressed={lane.intervalSec === intervalSec}
-                    onClick={() => setIntervalSec(lane.intervalSec)}
-                  >
-                    {lane.label}
-                  </button>
-                ))}
-              </nav>
-            </div>
-            <SwipeDeck key={intervalSec} intervalSec={intervalSec} />
-          </>
-        )}
-      </main>
+      {/* Tapping the dimmed content closes the drawer on small screens. */}
+      <div className="nav-scrim" onClick={() => setNavOpen(false)} aria-hidden="true" />
 
-      <footer className="disclosure">
-        Somnia testnet. Model estimates are generated from live venue data and have no verified track record. They are
-        guidance, not advice. Market price is the real odd.
-      </footer>
+      <div className="content">
+        <header className="topbar">
+          <button className="icon-btn nav-toggle" onClick={() => setNavOpen((v) => !v)} aria-label="Toggle navigation">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+          </button>
+
+          <h1 className="page-title">{HEADING[view]}</h1>
+
+          <div className="topbar-right">
+            <ThemeToggle />
+            <ConnectWallet onNavigate={select} />
+          </div>
+        </header>
+
+        <main className={view === "swipe" ? "main narrow" : "main"}>
+          {view === "markets" && <MarketGrid onSwipe={openSwipe} />}
+          {view === "accuracy" && <Accuracy />}
+          {view === "leaderboard" && <Leaderboard />}
+          {view === "portfolio" && <Portfolio />}
+          {view === "swipe" && (
+            <>
+              <div className="lane-row">
+                <nav className="lanes" aria-label="Contract window">
+                  {LANES.map((lane) => (
+                    <button
+                      key={lane.intervalSec}
+                      className={lane.intervalSec === intervalSec ? "lane on" : "lane"}
+                      aria-pressed={lane.intervalSec === intervalSec}
+                      onClick={() => setIntervalSec(lane.intervalSec)}
+                    >
+                      {lane.label}
+                    </button>
+                  ))}
+                </nav>
+              </div>
+              <SwipeDeck key={intervalSec} intervalSec={intervalSec} />
+            </>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

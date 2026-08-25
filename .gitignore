@@ -8,3 +8,7 @@ predictions.json
 model-stats.json
 quota.json
 *.tsbuildinfo
+
+# Design reference screenshots, not source
+image.png
+image copy.png

@@ -1,31 +1,18 @@
 import { useEffect, useState } from "react";
-import { useAccount, useBalance, useConnect, useDisconnect, useReadContract, useSwitchChain } from "wagmi";
-import { erc20Abi, formatUnits } from "viem";
-import { somniaTestnet, TUSDC } from "./config";
+import { useAccount, useConnect } from "wagmi";
+import { somniaTestnet } from "./config";
 import { WALLETS, detectInstalled } from "./wallets";
 import { WalletMark } from "./WalletMark";
+import { ProfileMenu } from "./ProfileMenu";
 
-function short(address: string): string {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-}
+type Props = { onNavigate: (view: "portfolio" | "leaderboard") => void };
 
-export function ConnectWallet() {
+export function ConnectWallet({ onNavigate }: Props) {
   const [open, setOpen] = useState(false);
   const [installed, setInstalled] = useState<Set<string>>(() => new Set());
 
-  const { address, isConnected, chainId } = useAccount();
+  const { address, isConnected } = useAccount();
   const { connect, connectors, isPending, error } = useConnect();
-  const { disconnect } = useDisconnect();
-  const { switchChain } = useSwitchChain();
-
-  const { data: gas } = useBalance({ address });
-  const { data: collateral } = useReadContract({
-    abi: erc20Abi,
-    address: TUSDC.address,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    query: { enabled: Boolean(address) },
-  });
 
   useEffect(() => {
     if (open) setInstalled(detectInstalled());
@@ -37,29 +24,7 @@ export function ConnectWallet() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const wrongChain = isConnected && chainId !== somniaTestnet.id;
-
-  if (isConnected && address) {
-    return (
-      <div className="wallet-bar">
-        {wrongChain ? (
-          <button className="wallet-chip warn" onClick={() => switchChain({ chainId: somniaTestnet.id })}>
-            Switch to Somnia
-          </button>
-        ) : (
-          <span className="wallet-chip">
-            {`${Number(formatUnits(collateral ?? 0n, TUSDC.decimals)).toFixed(2)} ${TUSDC.symbol}`}
-            <span className="wallet-gas">
-              {`${Number(formatUnits(gas?.value ?? 0n, 18)).toFixed(3)} STT`}
-            </span>
-          </span>
-        )}
-        <button className="wallet-chip addr" onClick={() => disconnect()} title="Disconnect">
-          {short(address)}
-        </button>
-      </div>
-    );
-  }
+  if (isConnected && address) return <ProfileMenu onNavigate={onNavigate} />;
 
   return (
     <>

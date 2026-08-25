@@ -112,8 +112,13 @@ export type Position = {
   expiry: number;
   outcomeIndex: number;
   size: number;
+  /** Shares bought, recovered from fills when a redeemed win has no balance. */
+  shares: number;
   finalized: boolean;
   winningOutcome: number | null;
+  /** Settled and already redeemed on chain. */
+  claimed: boolean;
+  won: boolean | null;
   cost: number | null;
   averagePrice: number | null;
   pnl: number | null;
