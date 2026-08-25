@@ -125,6 +125,38 @@ export type Position = {
   pnl: number | null;
 };
 
+export type OrderRow = {
+  orderId: string;
+  marketId: string;
+  asset: string;
+  intervalSec: number;
+  strike: number;
+  expiry: number;
+  side: string;
+  outcomeIndex: number;
+  price: number;
+  quantity: number;
+  filled: number;
+  remaining: number;
+  status: string;
+  rested: boolean;
+  placedAt: number;
+  txHash: string;
+};
+
+export async function fetchOrders(address: string): Promise<OrderRow[]> {
+  const res = await fetch(`/api/orders?address=${address}`);
+  if (!res.ok) return [];
+  return ((await res.json()) as { orders: OrderRow[] }).orders;
+}
+
+/** Absolute local date and time, for a history row that needs to be pinned down. */
+export function stamp(seconds: number): string {
+  if (!seconds) return "--";
+  const d = new Date(seconds * 1000);
+  return `${d.toLocaleDateString([], { day: "2-digit", month: "short" })} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+}
+
 export type Like = { marketId: string; count: number; liked: boolean };
 
 export function shortAddress(address: string): string {

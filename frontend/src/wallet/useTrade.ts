@@ -23,6 +23,12 @@ function readableError(err: unknown): string {
   return raw.split("\n")[0].slice(0, 140);
 }
 
+/** Progress for one placement, so a caller can drive a single toast with it. */
+export type TradePhase = "approving" | "placing" | "sent" | "done" | "error";
+export type OnPhase = (phase: TradePhase, detail: string) => void;
+
+const ignore: OnPhase = () => {};
+
 export function useTrade() {
   const { address, chainId } = useAccount();
   const config = useConfig();
@@ -31,12 +37,23 @@ export function useTrade() {
   const reset = useCallback(() => setState({ phase: "idle" }), []);
 
   const place = useCallback(
-    async (market: Market, direction: Direction, stake: number, modelProbability: number | null = null) => {
-      if (!address) return setState({ phase: "error", message: "Connect a wallet first" });
-      if (chainId !== somniaTestnet.id) return setState({ phase: "error", message: "Switch to Somnia testnet" });
+    async (
+      market: Market,
+      direction: Direction,
+      stake: number,
+      modelProbability: number | null = null,
+      onPhase: OnPhase = ignore,
+    ) => {
+      const fail = (message: string) => {
+        setState({ phase: "error", message });
+        onPhase("error", message);
+      };
+
+      if (!address) return fail("Connect a wallet first");
+      if (chainId !== somniaTestnet.id) return fail("Switch to Somnia testnet");
 
       const plan = planOrder(market, direction, stake, bidPrice(direction, modelProbability));
-      if (!plan) return setState({ phase: "error", message: "Window closed before the order could be built" });
+      if (!plan) return fail("Window closed before the order could be built");
 
       try {
         const allowance = await readContract(config, {
@@ -49,6 +66,7 @@ export function useTrade() {
         // Approve once per pool. Pools are recycled per window, so this recurs.
         if (allowance < plan.escrow) {
           setState({ phase: "approving" });
+          onPhase("approving", "");
           const approveHash = await writeContract(config, {
             abi: erc20Abi,
             address: plan.collateral,
@@ -59,6 +77,7 @@ export function useTrade() {
         }
 
         setState({ phase: "placing" });
+        onPhase("placing", "");
         const hash = await writeContract(config, {
           abi: binaryPoolAbi,
           address: plan.pool,
@@ -66,15 +85,26 @@ export function useTrade() {
           args: orderArgs(plan),
         });
 
+        // Signed and broadcast: say so before waiting, so a slow confirmation
+        // reads as waiting on the chain rather than as a stuck app.
+        onPhase("sent", hash);
+
         // A reverted binary write does not always throw, so check the receipt.
         const receipt = await waitForTransactionReceipt(config, { hash });
         if (receipt.status !== "success") {
-          return setState({ phase: "error", message: "Order reverted on chain" });
+          setState({ phase: "error", message: "Order reverted on chain" });
+          return onPhase("error", "Order reverted on chain");
         }
 
         setState({ phase: "done", hash, direction, shares: plan.shares, price: plan.limitPrice });
+        onPhase(
+          "done",
+          `${hash}|${plan.shares.toFixed(2)}|${Math.round(plan.limitPrice * 100)}|${direction}`,
+        );
       } catch (err) {
-        setState({ phase: "error", message: readableError(err) });
+        const message = readableError(err);
+        setState({ phase: "error", message });
+        onPhase("error", message);
       }
     },
     [address, chainId, config],

@@ -8,6 +8,8 @@ import { useToast } from "./Toast";
 
 const PREFETCH_DEPTH = 3;
 
+const noop = () => {};
+
 type Placed = { market: Market; direction: Direction };
 
 type DeckProps = {
@@ -28,9 +30,11 @@ export function SwipeDeck({ intervalSec, focusMarketId }: DeckProps) {
   const [announcement, setAnnouncement] = useState("");
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const undoTimer = useRef<number | null>(null);
+  // Sends the swipe currently sitting in its undo window, if there is one.
+  const flushPending = useRef<() => void>(noop);
   const [stake, setStake] = useState(5);
   const { isConnected } = useAccount();
-  const { state: trade, place, reset: resetTrade } = useTrade();
+  const { place } = useTrade();
   const toast = useToast();
   const lastPhase = useRef<string>("idle");
 
@@ -131,15 +135,53 @@ export function SwipeDeck({ intervalSec, focusMarketId }: DeckProps) {
         return;
       }
 
-      // Commit optimistically and give a short window to take it back.
+      // Commit optimistically and give a short window to take it back. Undo
+      // only ever applies to the newest swipe, so a second swipe inside the
+      // window must SEND the previous order rather than cancel its timer:
+      // clearing it silently dropped the first of two quick swipes.
+      flushPending.current();
+
       setPending({ market, direction });
       setAnnouncement(`${direction === "up" ? "Up" : "Down"} selected on ${title(market)}. Undo available for three seconds.`);
-      if (undoTimer.current) window.clearTimeout(undoTimer.current);
-      undoTimer.current = window.setTimeout(() => {
+
+      const send = () => {
         setPending(null);
         const read = predictions[market.marketId];
         const fair = read?.status === "ok" ? read.prediction.probability : null;
-        if (isConnected) place(market, direction, stake, fair);
+        if (!isConnected) return;
+
+        // One toast per order, updated in place. Pending toasts never expire on
+        // their own, so every path below has to land on a final state.
+        const id = toast.push("pending", `Placing ${direction === "up" ? "UP" : "DOWN"} on ${title(market)}`);
+        void place(market, direction, stake, fair, (phase, detail) => {
+          const tx = `https://shannon-explorer.somnia.network/tx/${detail}`;
+          if (phase === "approving") toast.update(id, "pending", "Approving tUSDC for this pool");
+          else if (phase === "placing") toast.update(id, "pending", "Waiting for your signature");
+          else if (phase === "sent") toast.update(id, "pending", "Sent. Waiting for confirmation", tx);
+          else if (phase === "error") toast.update(id, "error", detail);
+          else if (phase === "done") {
+            const [hash, shares, cents, side] = detail.split("|");
+            toast.update(
+              id,
+              "success",
+              `Resting ${shares} ${side === "up" ? "UP" : "DOWN"} at ${cents}c. It fills only if someone crosses it.`,
+              `https://shannon-explorer.somnia.network/tx/${hash}`,
+            );
+          }
+        });
+      };
+
+      flushPending.current = () => {
+        if (undoTimer.current) window.clearTimeout(undoTimer.current);
+        undoTimer.current = null;
+        flushPending.current = noop;
+        send();
+      };
+
+      undoTimer.current = window.setTimeout(() => {
+        undoTimer.current = null;
+        flushPending.current = noop;
+        send();
       }, 3000);
     },
     [deck, isConnected, place, stake, predictions],
@@ -150,26 +192,11 @@ export function SwipeDeck({ intervalSec, focusMarketId }: DeckProps) {
   const undo = useCallback(() => {
     if (undoTimer.current) window.clearTimeout(undoTimer.current);
     undoTimer.current = null;
+    flushPending.current = noop;
     setPending(null);
     setIndex((i) => Math.max(0, i - 1));
     setAnnouncement("Swipe undone.");
   }, []);
-
-  // Mirror each transaction phase into a toast without duplicating on rerender.
-  useEffect(() => {
-    if (trade.phase === lastPhase.current) return;
-    lastPhase.current = trade.phase;
-    if (trade.phase === "approving") toast.push("pending", "Approving tUSDC for this pool");
-    else if (trade.phase === "placing") toast.push("pending", "Placing order");
-    else if (trade.phase === "done") {
-      toast.push("success", `Resting ${trade.shares.toFixed(2)} ${trade.direction === "up" ? "UP" : "DOWN"} at ${Math.round(trade.price * 100)}c`,
-        `https://shannon-explorer.somnia.network/tx/${trade.hash}`);
-      resetTrade();
-    } else if (trade.phase === "error") {
-      toast.push("error", trade.message);
-      resetTrade();
-    }
-  }, [trade, toast, resetTrade]);
 
   const nextMint = useMemo(() => {
     return live.slice(index).length === 0 ? intervalSec - (now % intervalSec) : 0;
@@ -249,16 +276,6 @@ export function SwipeDeck({ intervalSec, focusMarketId }: DeckProps) {
             {pending.direction === "up" ? "Up" : "Down"} {stake} on {title(pending.market)}
           </span>
           <button onClick={undo}>Undo</button>
-        </div>
-      )}
-
-      {trade.phase !== "idle" && !pending && (
-        <div className={`trade-bar ${trade.phase}`} role="status">
-          {trade.phase === "approving" && <span>Approving tUSDC for this pool</span>}
-          {trade.phase === "placing" && <span>Placing order</span>}
-          {trade.phase === "done" && <span>Filled {trade.shares.toFixed(2)} {trade.direction === "up" ? "UP" : "DOWN"}</span>}
-          {trade.phase === "error" && <span>{trade.message}</span>}
-          {(trade.phase === "done" || trade.phase === "error") && <button onClick={resetTrade}>Dismiss</button>}
         </div>
       )}
 

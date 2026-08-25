@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
-import { fetchPositions, money, shortAddress, windowLabel, type Position } from "./api";
+import { fetchOrders, fetchPositions, money, shortAddress, stamp, windowLabel, type OrderRow, type Position } from "./api";
 import { useClaim } from "./wallet/useClaim";
 import { fmt, PAYOUT_PER_SHARE } from "./payout";
 import { useToast } from "./Toast";
 import { TableScroll, TableSkeleton, EmptyState } from "./Table";
 import { AssetMark } from "./AssetMark";
 
-const TABS = ["Positions", "History", "Activity"] as const;
+const TABS = ["Positions", "Orders", "History"] as const;
 type Tab = (typeof TABS)[number];
 type AssetFilter = "All" | "BTC" | "ETH";
 
@@ -21,6 +21,59 @@ function sharesOf(position: Position): number {
 function outcomeOf(position: Position) {
   if (!position.finalized || position.winningOutcome === null) return "open" as const;
   return position.outcomeIndex === position.winningOutcome ? ("won" as const) : ("lost" as const);
+}
+
+/**
+ * Orders, filled or not. A resting limit order leaves no outcome balance until
+ * something crosses it, so this is the only place an unfilled order is visible.
+ */
+function OrdersTable({ orders }: { orders: OrderRow[] | null }) {
+  if (!orders) return <TableSkeleton columns={["Market", "Side", "Price", "Size", "Filled", "Status", "Placed"]} rows={4} />;
+  if (orders.length === 0) {
+    return <EmptyState title="No orders yet" hint="Swiping a card places a resting limit order at the model's price." />;
+  }
+
+  return (
+    <TableScroll label="Orders">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Market</th>
+            <th>Side</th>
+            <th className="num">Target</th>
+            <th className="num">Price</th>
+            <th className="num">Size</th>
+            <th className="num">Filled</th>
+            <th className="num">Status</th>
+            <th className="num">Placed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {orders.map((o) => (
+            <tr key={o.orderId}>
+              <td>
+                <span className="asset-cell">
+                  <AssetMark asset={o.asset} size={18} />
+                  {o.asset} <span className="market-sub">{windowLabel(o.intervalSec)}</span>
+                </span>
+              </td>
+              <td>
+                <span className={`pos-side ${o.outcomeIndex === 0 ? "up" : "down"}`}>
+                  {o.outcomeIndex === 0 ? "UP" : "DOWN"}
+                </span>
+              </td>
+              <td className="num">${money(o.strike)}</td>
+              <td className="num">{Math.round(o.price * 100)}c</td>
+              <td className="num">{fmt(o.quantity)}</td>
+              <td className={`num ${o.filled === 0 ? "muted-cell" : ""}`}>{fmt(o.filled)}</td>
+              <td className={`num order-status ${o.status.toLowerCase()}`}>{o.status}</td>
+              <td className="num muted-cell">{stamp(o.placedAt)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </TableScroll>
+  );
 }
 
 function StatCard({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
@@ -39,6 +92,7 @@ export function Portfolio() {
   const [tab, setTab] = useState<Tab>("Positions");
   const [assetFilter, setAssetFilter] = useState<AssetFilter>("All");
   const [claimed, setClaimed] = useState<Set<string>>(() => new Set());
+  const [orders, setOrders] = useState<OrderRow[] | null>(null);
 
   const { claim, claiming } = useClaim();
   const toast = useToast();
@@ -48,6 +102,7 @@ export function Portfolio() {
     setPositions(null);
     setFailed(false);
     fetchPositions(address).then(setPositions).catch(() => setFailed(true));
+    fetchOrders(address).then(setOrders).catch(() => setOrders([]));
   };
 
   useEffect(load, [address]);
@@ -73,8 +128,7 @@ export function Portfolio() {
     const rows = positions ?? [];
     const byAsset = assetFilter === "All" ? rows : rows.filter((p) => p.asset === assetFilter);
     if (tab === "History") return byAsset.filter((p) => outcomeOf(p) !== "open");
-    if (tab === "Positions") return byAsset.filter((p) => outcomeOf(p) === "open");
-    return byAsset;
+    return byAsset.filter((p) => outcomeOf(p) === "open");
   }, [positions, assetFilter, tab]);
 
   const onClaim = (position: Position) => {
@@ -140,11 +194,13 @@ export function Portfolio() {
       </div>
 
       {failed && <EmptyState title="History unavailable" hint="The indexer did not respond." />}
-      {!failed && !positions && (
+      {!failed && !positions && tab !== "Orders" && (
         <TableSkeleton columns={["Market", "Side", "Shares", "Avg", "Cost", "Pays", "P&L"]} rows={4} />
       )}
 
-      {positions && !failed && (
+      {tab === "Orders" && <OrdersTable orders={orders} />}
+
+      {tab !== "Orders" && positions && !failed && (
         filtered.length === 0 ? (
           <EmptyState
             title="Nothing here yet"
@@ -164,6 +220,7 @@ export function Portfolio() {
                 <th className="num">Pays</th>
                 <th className="num">P&L</th>
                 <th className="num">Result</th>
+                {tab === "History" && <th className="num">Settled</th>}
                 <th className="num">Action</th>
               </tr>
             </thead>
@@ -200,6 +257,7 @@ export function Portfolio() {
                     <td className={`num pos-result ${outcome === "won" ? "win" : outcome === "lost" ? "loss" : "open"}`}>
                       {outcome === "won" ? "Won" : outcome === "lost" ? "Lost" : "Open"}
                     </td>
+                    {tab === "History" && <td className="num muted-cell">{stamp(position.expiry)}</td>}
                     <td className="num">
                       {outcome === "won" && !isClaimed ? (
                         <button className="claim" onClick={() => onClaim(position)} disabled={busy}>

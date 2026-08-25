@@ -1,6 +1,6 @@
 import "dotenv/config";
 import express from "express";
-import { liveMarkets, strikeSeries, positionsFor, leaderboard, settledMarkets } from "./markets.js";
+import { liveMarkets, strikeSeries, positionsFor, leaderboard, settledMarkets, ordersFor } from "./markets.js";
 import { likesFor, toggleLike } from "./social.js";
 import { costBasisFor, type BasisIndex } from "./fills.js";
 import { startTracker, allRecords, modelScores, cachedPrediction, cachedPredictions } from "./tracker.js";
@@ -206,6 +206,21 @@ app.get("/api/positions", async (req, res) => {
     res.json({ positions: priced });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message, positions: [] });
+  }
+});
+
+// Orders, filled or not. A resting order leaves no balance until it fills, so
+// this is the only place an unfilled order is visible.
+app.get("/api/orders", async (req, res) => {
+  const address = String(req.query.address ?? "").toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(address)) {
+    res.status(400).json({ error: "valid address required", orders: [] });
+    return;
+  }
+  try {
+    res.json({ orders: await ordersFor(address, 60) });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message, orders: [] });
   }
 });
 

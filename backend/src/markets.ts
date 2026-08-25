@@ -287,6 +287,65 @@ export async function positionsFor(address: string, limit: number): Promise<Posi
   return data.OutcomeBalance.map(toPosition).filter((p) => p.marketId);
 }
 
+export type OrderRow = {
+  orderId: string;
+  marketId: string;
+  asset: string;
+  intervalSec: number;
+  strike: number;
+  expiry: number;
+  side: string;
+  /** The leg the order buys: 0 is up/YES, matching OutcomeBalance. */
+  outcomeIndex: number;
+  price: number;
+  quantity: number;
+  filled: number;
+  remaining: number;
+  status: string;
+  rested: boolean;
+  placedAt: number;
+  txHash: string;
+};
+
+/**
+ * The account's orders, filled or not. A resting limit order leaves no balance
+ * until it fills, so without this an order that never filled is invisible.
+ */
+export async function ordersFor(address: string, limit: number): Promise<OrderRow[]> {
+  const body = JSON.stringify({
+    query: `query Orders($account: String!, $limit: Int!) {
+      Order(limit: $limit, where: {owner: {_eq: $account}}, order_by: {placedAtTimestamp: desc}) {
+        orderId side price fullQuantity filledQuantity quantityRemaining status rested
+        placedAtTimestamp placedTxHash
+        market { marketId asset intervalSec strike expiry }
+      }
+    }`,
+    variables: { account: address.toLowerCase(), limit },
+  });
+
+  const data = await query<{ Order: Record<string, any>[] }>(body);
+  return data.Order
+    .filter((o) => o.market?.marketId)
+    .map((o) => ({
+      orderId: String(o.orderId),
+      marketId: String(o.market.marketId),
+      asset: String(o.market.asset ?? ""),
+      intervalSec: Number(o.market.intervalSec ?? 0),
+      strike: Number(o.market.strike ?? 0) / STRIKE_SCALE,
+      expiry: Number(o.market.expiry ?? 0),
+      side: String(o.side ?? ""),
+      outcomeIndex: String(o.side).includes("NO") ? 1 : 0,
+      price: Number(o.price) / PRICE_SCALE,
+      quantity: Number(o.fullQuantity) / COLLATERAL_SCALE,
+      filled: Number(o.filledQuantity) / COLLATERAL_SCALE,
+      remaining: Number(o.quantityRemaining) / COLLATERAL_SCALE,
+      status: String(o.status ?? ""),
+      rested: Boolean(o.rested),
+      placedAt: Number(o.placedAtTimestamp ?? 0),
+      txHash: String(o.placedTxHash ?? ""),
+    }));
+}
+
 export type TraderRow = { account: string; settled: number; wins: number; winRate: number; volume: number };
 
 // Ranked from settled positions: a position wins when its outcome is the winner.

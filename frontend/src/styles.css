@@ -395,7 +395,9 @@ body {
 
 .nav-scrim { display: none; }
 
-.main { width: 100%; max-width: 1480px; padding: 24px 26px 40px; flex: 1; }
+/* Full width: the rail already bounds the line length on the left, and the
+   grids inside cap their own column count. */
+.main { width: 100%; padding: 24px 26px 40px; flex: 1; }
 .main.narrow { max-width: 470px; margin: 0 auto; }
 .lane-row { display: flex; justify-content: flex-end; }
 
@@ -482,6 +484,13 @@ body {
 .token svg { display: block; }
 /* Keeps the mark, symbol and window on one baseline inside a table row. */
 .asset-cell { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+
+/* An order's fate, at a glance: filled is a result, expired and cancelled are
+   not failures of the app but they are not fills either. */
+.order-status { font-weight: 600; }
+.order-status.filled { color: var(--up); }
+.order-status.open, .order-status.resting, .order-status.partiallyfilled { color: var(--accent); }
+.order-status.expired, .order-status.cancelled, .order-status.canceled { color: var(--muted); }
 .token.btc { background: var(--btc-bg); color: var(--btc-fg); }
 .token.eth { background: var(--eth-bg); color: var(--eth-fg); }
 .market-title { flex: 1; min-width: 0; }
