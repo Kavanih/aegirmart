@@ -26,9 +26,13 @@ export function App() {
   const [view, setView] = useState<View>("markets");
   const [intervalSec, setIntervalSec] = useState(LANES[0].intervalSec);
   const [navOpen, setNavOpen] = useState(false);
+  const [focusMarketId, setFocusMarketId] = useState<string | null>(null);
 
-  const openSwipe = (lane: number) => {
+  // A card in the grid opens the deck on that exact contract; the hero opens
+  // the lane it advertises.
+  const openSwipe = (lane: number, marketId?: string) => {
     setIntervalSec(lane);
+    setFocusMarketId(marketId ?? null);
     setView("swipe");
   };
 
@@ -74,14 +78,17 @@ export function App() {
                       key={lane.intervalSec}
                       className={lane.intervalSec === intervalSec ? "lane on" : "lane"}
                       aria-pressed={lane.intervalSec === intervalSec}
-                      onClick={() => setIntervalSec(lane.intervalSec)}
+                      onClick={() => {
+                        setIntervalSec(lane.intervalSec);
+                        setFocusMarketId(null);
+                      }}
                     >
                       {lane.label}
                     </button>
                   ))}
                 </nav>
               </div>
-              <SwipeDeck key={intervalSec} intervalSec={intervalSec} />
+              <SwipeDeck key={intervalSec} intervalSec={intervalSec} focusMarketId={focusMarketId} />
             </>
           )}
         </main>

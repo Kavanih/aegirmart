@@ -51,7 +51,7 @@ const ADVANCE_MS = 7000;
 type Props = {
   liveCount: number;
   tradeCount: number;
-  onSwipe: (intervalSec: number) => void;
+  onSwipe: (intervalSec: number, marketId?: string) => void;
 };
 
 export function Hero({ liveCount, tradeCount, onSwipe }: Props) {
@@ -114,7 +114,7 @@ export function Hero({ liveCount, tradeCount, onSwipe }: Props) {
           <h2>{slide.title}</h2>
           <p className="hero-body">{slide.body}</p>
           <div className="hero-actions">
-            <button className="cta" onClick={() => onSwipe(300)}>
+            <button className="cta" onClick={() => onSwipe(60)}>
               Start swiping
             </button>
             <span className="hero-note">Somnia testnet</span>

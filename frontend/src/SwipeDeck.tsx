@@ -10,7 +10,13 @@ const PREFETCH_DEPTH = 3;
 
 type Placed = { market: Market; direction: Direction };
 
-export function SwipeDeck({ intervalSec }: { intervalSec: number }) {
+type DeckProps = {
+  intervalSec: number;
+  /** Opens the deck on this contract, for arriving from a card in the grid. */
+  focusMarketId?: string | null;
+};
+
+export function SwipeDeck({ intervalSec, focusMarketId }: DeckProps) {
   const [markets, setMarkets] = useState<Market[]>([]);
   const [series, setSeries] = useState<Record<string, PricePoint[]>>({});
   const [spot, setSpot] = useState<Record<string, number | null>>({});
@@ -72,10 +78,19 @@ export function SwipeDeck({ intervalSec }: { intervalSec: number }) {
     };
   }, [intervalSec]);
 
-  const deck = useMemo(
-    () => markets.filter((m) => m.expiry > now).slice(index, index + PREFETCH_DEPTH),
-    [markets, index, now],
-  );
+  const live = useMemo(() => markets.filter((m) => m.expiry > now), [markets, now]);
+  const deck = useMemo(() => live.slice(index, index + PREFETCH_DEPTH), [live, index]);
+
+  // Jump to the requested contract once it arrives in the feed. Applied once
+  // per request so it cannot fight the user's own swiping afterwards.
+  const focused = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusMarketId || focused.current === focusMarketId) return;
+    const at = live.findIndex((m) => m.marketId === focusMarketId);
+    if (at === -1) return;
+    focused.current = focusMarketId;
+    setIndex(at);
+  }, [focusMarketId, live]);
 
   // Resolve the top card and the next two so the estimate is ready on arrival.
   useEffect(() => {
@@ -157,9 +172,8 @@ export function SwipeDeck({ intervalSec }: { intervalSec: number }) {
   }, [trade, toast, resetTrade]);
 
   const nextMint = useMemo(() => {
-    const future = markets.filter((m) => m.expiry > now).slice(index);
-    return future.length === 0 ? intervalSec - (now % intervalSec) : 0;
-  }, [markets, index, now, intervalSec]);
+    return live.slice(index).length === 0 ? intervalSec - (now % intervalSec) : 0;
+  }, [live, index, now, intervalSec]);
 
   return (
     <div className={`deck-wrap ${reduced ? "reduced" : ""}`}>

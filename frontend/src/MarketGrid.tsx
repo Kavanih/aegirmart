@@ -8,7 +8,7 @@ import { Hero } from "./Hero";
 
 const LANES = [60, 300];
 
-type Props = { onSwipe: (intervalSec: number) => void };
+type Props = { onSwipe: (intervalSec: number, marketId?: string) => void };
 
 type Row = { market: Market; series: PricePoint[]; spot: number | null };
 
@@ -156,8 +156,22 @@ export function MarketGrid({ onSwipe }: Props) {
                 </div>
 
                 <div className="market-actions">
-                  <button className="mini up" onClick={() => onSwipe(market.intervalSec)}>Up</button>
-                  <button className="mini down" onClick={() => onSwipe(market.intervalSec)}>Down</button>
+                  {/* Open this contract in the deck. Committing still happens
+                      there, so browsing the grid cannot place an order. */}
+                  <button
+                    className="mini up"
+                    onClick={() => onSwipe(market.intervalSec, market.marketId)}
+                    title={`Open ${title(market)} to take the up side`}
+                  >
+                    Up
+                  </button>
+                  <button
+                    className="mini down"
+                    onClick={() => onSwipe(market.intervalSec, market.marketId)}
+                    title={`Open ${title(market)} to take the down side`}
+                  >
+                    Down
+                  </button>
                 </div>
 
                 <footer>
