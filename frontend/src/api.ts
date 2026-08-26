@@ -316,15 +316,18 @@ export type MarketRead = {
   correct: boolean | null;
 };
 
+export type Holding = { outcomeIndex: number; shares: number; cost: number | null; pnl: number | null };
+
 export type MarketDetail = {
   market: Market & { finalized?: boolean; wentUp?: boolean | null };
   series: PricePoint[];
   trades: MarketTrade[];
+  holdings: Holding[];
   read: MarketRead | null;
 };
 
-export async function fetchMarketDetail(marketId: string): Promise<MarketDetail | null> {
-  const res = await fetch(`/api/market/${marketId}`);
+export async function fetchMarketDetail(marketId: string, address?: string): Promise<MarketDetail | null> {
+  const res = await fetch(`/api/market/${marketId}${address ? `?address=${address}` : ""}`);
   if (!res.ok) return null;
   return (await res.json()) as MarketDetail;
 }

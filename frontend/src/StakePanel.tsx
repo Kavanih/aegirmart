@@ -2,7 +2,12 @@ import { useAccount, useReadContract } from "wagmi";
 import { erc20Abi, formatUnits } from "viem";
 import { TUSDC } from "./wallet/config";
 
-type Props = { stake: number; onChange: (stake: number) => void };
+type Props = {
+  stake: number;
+  onChange: (stake: number) => void;
+  /** Offer fractions of the balance instead of fixed additions. */
+  percentOfBalance?: boolean;
+};
 
 const QUICK = [1, 5, 10, 100];
 const MAX_STAKE = 100_000;
@@ -14,7 +19,7 @@ const MAX_STAKE = 100_000;
  * amount the way a book's ticket does, so stacking them reaches any figure
  * without hunting for a preset that happens to match.
  */
-export function StakePanel({ stake, onChange }: Props) {
+export function StakePanel({ stake, onChange, percentOfBalance = false }: Props) {
   const { address, isConnected } = useAccount();
 
   const { data: balance } = useReadContract({
@@ -56,11 +61,22 @@ export function StakePanel({ stake, onChange }: Props) {
       </header>
 
       <div className="stake-quick">
-        {QUICK.map((amount) => (
-          <button key={amount} className="stake" onClick={() => onChange(clamp(stake + amount))}>
-            +${amount}
-          </button>
-        ))}
+        {percentOfBalance
+          ? [25, 50, 75].map((percent) => (
+              <button
+                key={percent}
+                className="stake"
+                disabled={!isConnected || available <= 0}
+                onClick={() => onChange(clamp((available * percent) / 100))}
+              >
+                {percent}%
+              </button>
+            ))
+          : QUICK.map((amount) => (
+              <button key={amount} className="stake" onClick={() => onChange(clamp(stake + amount))}>
+                +${amount}
+              </button>
+            ))}
         <button
           className="stake"
           onClick={() => onChange(clamp(available))}

@@ -244,10 +244,20 @@ app.get("/api/market/:marketId", async (req, res) => {
 
     const read = cachedPredictions([marketId])[0] ?? null;
 
+    // What the caller already holds here, so the ticket can say whether this
+    // adds to a position or opens one.
+    const holder = String(req.query.address ?? "").toLowerCase();
+    const holdings = ADDRESS.test(holder)
+      ? (await pricedPositionsFor(holder).catch(() => []))
+          .filter((p) => p.marketId === marketId)
+          .map((p) => ({ outcomeIndex: p.outcomeIndex, shares: p.shares, cost: p.cost, pnl: p.pnl }))
+      : [];
+
     res.json({
       market,
       series,
       trades,
+      holdings,
       read: read && {
         probability: read.probability,
         side: read.side,

@@ -1161,3 +1161,20 @@ button.logo:hover .wordmark span { color: var(--text); }
 .strategy-rate.bad { color: var(--down); }
 .strategy-rate.none { color: var(--muted); font-size: 15px; font-weight: 600; }
 .strategy-meta { font-size: 11px; color: var(--muted); }
+
+
+/* ---- Detail extras ---- */
+.detail-pills { display: flex; flex-wrap: wrap; gap: 7px; margin-top: -10px; }
+.detail-pill { font-size: 10.5px; font-weight: 600; padding: 4px 11px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--muted); background: var(--surface); white-space: nowrap; }
+.detail-pill.open { color: var(--up); border-color: var(--up-line); background: var(--up-bg); }
+
+/* What the order does, before it is signed. */
+.ticket-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin: 0;
+  padding: 12px 13px; background: var(--surface-2); border-radius: 10px; }
+.ticket-preview div { min-width: 0; }
+.ticket-preview dt { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--muted); margin-bottom: 3px; }
+.ticket-preview dd { margin: 0; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ticket-preview dd.pays { color: var(--up); }

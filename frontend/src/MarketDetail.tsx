@@ -29,7 +29,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const [book, setBook] = useState<MarketBook | null>(null);
 
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
 
   // The resting book, for what a leg actually costs rather than what it last
   // traded at. Polled with the page.
@@ -57,7 +57,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
   useEffect(() => {
     let alive = true;
     const load = () =>
-      fetchMarketDetail(marketId).then((d) => {
+      fetchMarketDetail(marketId, address).then((d) => {
         if (!alive) return;
         if (d) setData(d);
         else setMissing(true);
@@ -68,7 +68,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
       alive = false;
       window.clearInterval(poll);
     };
-  }, [marketId]);
+  }, [marketId, address]);
 
   // Only the path up to this window's close belongs on this contract's chart.
   // Drawing today's price against a strike set hours ago says nothing true.
@@ -90,6 +90,18 @@ export function MarketDetail({ marketId, onBack }: Props) {
   const modelUp = read ? read.probability : null;
   const bestBidUp = book?.bids[0]?.price ?? null;
   const bestAskUp = book?.asks[0]?.price ?? null;
+  const depth = (book?.bids.length ?? 0) + (book?.asks.length ?? 0);
+  // Size resting on each leg, which is what "can I actually get filled" means.
+  const upDepth = (book?.asks ?? []).reduce((n, l) => n + l.size, 0);
+  const downDepth = (book?.bids ?? []).reduce((n, l) => n + l.size, 0);
+  const held = (leg: "up" | "down") => data.holdings.find((h) => h.outcomeIndex === (leg === "up" ? 0 : 1)) ?? null;
+
+  // The order the ticket would place: the model's price where there is a read,
+  // otherwise the book's own offer on that leg.
+  const ticketPrice = side === "up"
+    ? modelUp ?? bestAskUp
+    : modelUp !== null ? 1 - modelUp : bestBidUp === null ? null : 1 - bestBidUp;
+  const shares = ticketPrice && ticketPrice > 0 ? stake / ticketPrice : null;
 
   const onBuy = () => {
     if (!isConnected) return toast.push("error", "Connect a wallet first");
@@ -136,6 +148,15 @@ export function MarketDetail({ marketId, onBack }: Props) {
           </span>
         </header>
 
+        <div className="detail-pills">
+          <span className={live ? "detail-pill open" : "detail-pill"}>{live ? "Open" : "Closed"}</span>
+          <span className="detail-pill">tUSDC</span>
+          <span className="detail-pill">{market.tradeCount === 0 ? "No trades" : `${market.tradeCount} trades`}</span>
+          <span className="detail-pill">
+            {depth === 0 ? "No resting orders" : `${depth} resting`}
+          </span>
+        </div>
+
         <section className="detail-chart">
           <div className="chart-legend">
             <span><span className="key-line target" /> Target ${money(market.strike)}</span>
@@ -178,6 +199,14 @@ export function MarketDetail({ marketId, onBack }: Props) {
                 <span className="outcome-figure">
                   {ask === null ? <em className="read-idle">--</em> : `${(1 / ask).toFixed(2)}x`}
                   <span className="outcome-sub">payout</span>
+                </span>
+                <span className="outcome-figure">
+                  {(leg === "up" ? upDepth : downDepth).toFixed(2)}
+                  <span className="outcome-sub">available</span>
+                </span>
+                <span className="outcome-figure">
+                  {held(leg) ? held(leg)!.shares.toFixed(2) : <em className="read-idle">none</em>}
+                  <span className="outcome-sub">you hold</span>
                 </span>
                 <button
                   className={`mini ${leg}`}
@@ -259,7 +288,27 @@ export function MarketDetail({ marketId, onBack }: Props) {
           })}
         </div>
 
-        <StakePanel stake={stake} onChange={setStake} />
+        <StakePanel stake={stake} onChange={setStake} percentOfBalance />
+
+        {/* What the order actually does, before it is signed. */}
+        <dl className="ticket-preview">
+          <div>
+            <dt>Price</dt>
+            <dd>{ticketPrice === null ? "--" : `${Math.round(ticketPrice * 100)}c`}</dd>
+          </div>
+          <div>
+            <dt>Shares</dt>
+            <dd>{shares === null ? "--" : shares.toFixed(2)}</dd>
+          </div>
+          <div>
+            <dt>Pays if right</dt>
+            <dd className="pays">{shares === null ? "--" : shares.toFixed(2)}</dd>
+          </div>
+          <div>
+            <dt>You hold</dt>
+            <dd>{held(side) ? `${held(side)!.shares.toFixed(2)} already` : "nothing yet"}</dd>
+          </div>
+        </dl>
 
         <button className="ticket-cta" onClick={onBuy} disabled={!live || stake <= 0}>
           {!live ? "Window closed" : `Buy ${side === "up" ? "Up" : "Down"}`}
