@@ -498,7 +498,10 @@ export async function ordersFor(address: string, limit: number): Promise<OrderRo
       strike: Number(o.market.strike ?? 0) / STRIKE_SCALE,
       expiry: Number(o.market.expiry ?? 0),
       side: String(o.side ?? ""),
-      outcomeIndex: String(o.side).includes("NO") ? 1 : 0,
+      // Direction, not leg name. Buying YES and selling NO are both bets that
+      // it goes up; selling YES and buying NO are both bets that it does not.
+      // Reading only for "NO" labelled every SELL_YES as an up bet.
+      outcomeIndex: /^(BUY_YES|SELL_NO)$/.test(String(o.side)) ? 0 : 1,
       price: Number(o.price) / PRICE_SCALE,
       quantity: Number(o.fullQuantity) / COLLATERAL_SCALE,
       filled: Number(o.filledQuantity) / COLLATERAL_SCALE,

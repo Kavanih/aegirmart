@@ -418,6 +418,44 @@ app.delete("/api/bots/:id/key", (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * One bot's own record: what it has resting, what it filled, and how much of
+ * its daily allowance is gone. Keyed on the address its stored key controls,
+ * since that is who the venue sees placing the orders.
+ */
+app.get("/api/bots/:id/activity", async (req, res) => {
+  const address = requireAddress(req.query.address, res);
+  if (!address) return;
+
+  const bot = botsFor(address).find((b) => b.id === String(req.params.id));
+  if (!bot) {
+    res.status(404).json({ error: "bot not found" });
+    return;
+  }
+  if (!bot.keyAddress) {
+    res.json({ bot, orders: [], summary: { placed: 0, filled: 0, open: 0, expired: 0, volume: 0 } });
+    return;
+  }
+
+  try {
+    const orders = await ordersFor(bot.keyAddress, 100);
+    const summary = orders.reduce(
+      (acc, o) => {
+        acc.placed += 1;
+        if (o.status === "Filled") acc.filled += 1;
+        else if (o.status === "Open") acc.open += 1;
+        else acc.expired += 1;
+        acc.volume += o.filled;
+        return acc;
+      },
+      { placed: 0, filled: 0, open: 0, expired: 0, volume: 0 },
+    );
+    res.json({ bot, orders, summary });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message, bot, orders: [], summary: null });
+  }
+});
+
 // The models a pro bot can be pointed at. Reads the catalogue, never the model.
 app.get("/api/models", async (_req, res) => {
   try {

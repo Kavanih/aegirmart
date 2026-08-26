@@ -1076,3 +1076,14 @@ button.logo:hover .wordmark span { color: var(--text); }
 .tier-features { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
 .tier-features li { display: flex; align-items: flex-start; gap: 9px; font-size: 12.5px; line-height: 1.5; }
 .tier-features svg { margin-top: 3px; flex-shrink: 0; color: var(--up); font-size: 10px; }
+
+/* The card body opens the bot; its own controls sit above the overlay. */
+.bot-card { position: relative; }
+.bot-open { position: absolute; inset: 0; z-index: 0; border: none; background: none;
+  cursor: pointer; border-radius: 14px; }
+.bot-card header, .bot-card .bot-config, .bot-card .bot-signer, .bot-card footer { position: relative; z-index: 1; }
+.bot-card footer button { position: relative; z-index: 2; }
+.bot-card:has(.bot-open:hover) { border-color: var(--accent); }
+
+.page-head .detail-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.page-head .detail-title h2 { margin: 0; }

@@ -200,7 +200,21 @@ export type Bot = {
   updatedAt: number;
   /** The address the stored signing key controls, or null when none is set. */
   keyAddress: string | null;
+  tradesToday: number;
+  tradeDay: string;
 };
+
+export type BotSummary = { placed: number; filled: number; open: number; expired: number; volume: number };
+
+export async function fetchBotActivity(address: string, id: string): Promise<{
+  bot: Bot;
+  orders: OrderRow[];
+  summary: BotSummary | null;
+} | null> {
+  const res = await fetch(`/api/bots/${id}/activity?address=${address}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
 
 export type Plan = Subscription;
 export type BotLimits = {

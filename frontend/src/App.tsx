@@ -64,6 +64,9 @@ export function App() {
   // back and forward move it.
   useEffect(() => {
     const want = detailId ? `#/market/${encodeURIComponent(detailId)}` : `#/${view}`;
+    // A view may own a deeper route of its own, like #/bot/<id>. Leave those
+    // alone rather than flattening them back to the section.
+    if (window.location.hash.startsWith(`${want}/`)) return;
     if (window.location.hash !== want) window.history.replaceState(null, "", want);
   }, [view, detailId]);
 

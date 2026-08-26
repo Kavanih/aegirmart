@@ -5,6 +5,7 @@ import {
 } from "react-icons/fa";
 import { fetchBooks, fetchBots, removeBot, saveBot, type Bot, type BotLimits, type MarketBook, type Plan } from "./api";
 import { BotForm } from "./BotForm";
+import { BotDetail } from "./BotDetail";
 import { EmptyState } from "./Table";
 
 function shortModel(id: string | null): string {
@@ -13,6 +14,10 @@ function shortModel(id: string | null): string {
 }
 
 export function BotPage() {
+  const [openBotId, setOpenBotId] = useState<string | null>(() => {
+    const m = window.location.hash.match(/^#\/bot\/(.+)$/);
+    return m ? decodeURIComponent(m[1]) : null;
+  });
   const { address } = useAccount();
   const [bots, setBots] = useState<Bot[] | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -60,6 +65,23 @@ export function BotPage() {
 
   if (!address) {
     return <EmptyState title="Connect a wallet" hint="Bots are stored against the account that owns them." />;
+  }
+
+  if (openBotId) {
+    return (
+      <BotDetail
+        botId={openBotId}
+        onBack={() => {
+          setOpenBotId(null);
+          window.history.replaceState(null, "", "#/bot");
+          load();
+        }}
+        onEdit={(bot) => {
+          setEditing(bot);
+          setOpen(true);
+        }}
+      />
+    );
   }
 
   const isPro = plan?.plan === "pro";
@@ -115,6 +137,14 @@ export function BotPage() {
         <div className="bot-grid">
           {bots.map((bot) => (
             <article key={bot.id} className={`bot-card ${bot.status}`}>
+              <button
+                className="bot-open"
+                onClick={() => {
+                  setOpenBotId(bot.id);
+                  window.history.replaceState(null, "", `#/bot/${bot.id}`);
+                }}
+                aria-label={`Open ${bot.name}`}
+              />
               <header>
                 <span className={`bot-mark ${bot.kind}`}>{bot.kind === "ai" ? <FaBrain /> : <FaRobot />}</span>
                 <div className="bot-id">
