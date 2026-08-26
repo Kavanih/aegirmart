@@ -230,6 +230,8 @@ export async function fetchBotActivity(address: string, id: string): Promise<{
   orders: OrderRow[];
   summary: BotSummary | null;
   stats: BotStats | null;
+  keyChanged: boolean;
+  recordedMarkets: number;
 } | null> {
   const res = await fetch(`/api/bots/${id}/activity?address=${address}`);
   if (!res.ok) return null;

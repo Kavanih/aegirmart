@@ -22,6 +22,7 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [summary, setSummary] = useState<BotSummary | null>(null);
   const [stats, setStats] = useState<BotStats | null>(null);
+  const [keyChanged, setKeyChanged] = useState(false);
   const [missing, setMissing] = useState(false);
 
   const load = useCallback(() => {
@@ -32,6 +33,7 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
       setOrders(d.orders);
       setSummary(d.summary);
       setStats(d.stats);
+      setKeyChanged(d.keyChanged);
     });
   }, [address, botId]);
 
@@ -131,6 +133,13 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
         <p className="footnote">
           <FaBrain aria-hidden="true" /> Prices from {bot.model ? bot.model.replace(/:free$/, "") : "the best available model"}.
           A window with no stored read is skipped rather than asking the model on a timer.
+        </p>
+      )}
+
+      {keyChanged && (
+        <p className="banner offline">
+          This bot has a record of trades, but none belong to the key it holds now. Orders stay with the key that
+          signed them, so replacing a bot's key leaves its history behind.
         </p>
       )}
 

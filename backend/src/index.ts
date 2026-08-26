@@ -446,13 +446,15 @@ app.get("/api/bots/:id/activity", async (req, res) => {
       bot, orders: [],
       summary: { placed: 0, filled: 0, open: 0, expired: 0, volume: 0 },
       stats: { settled: 0, won: 0, winRate: 0, realised: 0, lost: 0, priced: 0, unpriced: 0 },
+      keyChanged: false,
+      recordedMarkets: (bot.markets ?? []).length,
     });
     return;
   }
 
   try {
     const [orders, priced] = await Promise.all([
-      ordersFor(bot.keyAddress, 100),
+      ordersFor(bot.keyAddress, 300),
       pricedPositionsFor(bot.keyAddress).catch(() => []),
     ]);
     const stats = summarise(priced);
@@ -467,7 +469,13 @@ app.get("/api/bots/:id/activity", async (req, res) => {
       },
       { placed: 0, filled: 0, open: 0, expired: 0, volume: 0 },
     );
-    res.json({ bot, orders, summary, stats });
+    // The record is kept per bot, the orders belong to whichever key signed
+    // them. Replace a bot's key and its history stays with the old one, so say
+    // that rather than showing a trade count beside an empty table.
+    const recorded = (bot.markets ?? []).length;
+    const keyChanged = orders.length === 0 && recorded > 0;
+
+    res.json({ bot, orders, summary, stats, keyChanged, recordedMarkets: recorded });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message, bot, orders: [], summary: null });
   }
