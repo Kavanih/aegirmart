@@ -142,6 +142,7 @@ export type TierSpec = {
   yearly: number;
   yearlyDiscount: number;
   dailyTrades: number;
+  strategyBots: boolean;
   aiBots: boolean;
   paidModels: boolean;
   features: string[];
@@ -183,7 +184,7 @@ export async function redeemPlan(
   return ((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Could not confirm the payment";
 }
 
-export type BotKind = "standard" | "ai";
+export type BotKind = "standard" | "quant" | "ai";
 
 export type Bot = {
   id: string;

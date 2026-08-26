@@ -17,7 +17,9 @@ const PLANS = new URL("../plans.json", import.meta.url).pathname;
 export const MAX_BOTS = 5;
 export const PRO_PRICE = 20;
 export const ASSETS = ["BTC", "ETH", "BOTH"] as const;
-export const KINDS = ["standard", "ai"] as const;
+export const KINDS = ["standard", "quant", "ai"] as const;
+/** A model read takes tens of seconds, which a sixty second window cannot wait for. */
+export const AI_MIN_INTERVAL = 300;
 
 export type BotKind = (typeof KINDS)[number];
 
@@ -182,8 +184,8 @@ function clean(draft: BotDraft, plan: Plan, address: string, current?: Bot): { b
   const kind = draft.kind ?? current?.kind ?? "standard";
   if (!KINDS.includes(kind)) return { error: "kind must be standard or ai" };
   const spec = tierSpec(plan.plan);
-  if (kind === "ai" && !spec.aiBots) {
-    return { error: "An AI bot needs the Starter plan or better" };
+  if (kind !== "standard" && !spec.strategyBots) {
+    return { error: `${kind === "ai" ? "An AI" : "A quant"} bot needs the Starter plan or better` };
   }
 
   const asset = draft.asset ?? current?.asset ?? "BOTH";
@@ -221,7 +223,7 @@ function clean(draft: BotDraft, plan: Plan, address: string, current?: Bot): { b
     }
   }
 
-  // A standard bot has no model to name; storing one would imply it uses it.
+  // Only an AI bot names a model; storing one elsewhere would imply it is used.
   const model = kind === "ai" ? (draft.model ?? current?.model ?? null) : null;
 
   return { bot: { name, kind, asset, stake, dailyTrades, spread, model, status } };

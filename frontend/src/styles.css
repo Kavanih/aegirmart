@@ -962,6 +962,7 @@ button.logo:hover .wordmark span { color: var(--text); }
 .bot-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px;
   font-size: 16px; flex-shrink: 0; background: var(--surface-2); color: var(--muted); }
 .bot-mark.ai { background: var(--warn-bg); color: var(--conf-medium); }
+.bot-mark.quant { background: var(--eth-bg); color: var(--eth-fg); }
 .bot-mark.standard { background: var(--up-bg); color: var(--up-fg); }
 .bot-id { min-width: 0; }
 .bot-id h4 { margin: 0; font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1002,7 +1003,8 @@ button.logo:hover .wordmark span { color: var(--text); }
 .input-unit input { padding-right: 58px; }
 .input-unit > span { position: absolute; right: 12px; font-size: 11px; color: var(--muted); pointer-events: none; }
 
-.kind-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.kind-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.lane-note { padding: 10px 12px; background: var(--surface-2); border-radius: 9px; }
 .kind { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 12px;
   border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); cursor: pointer;
   text-align: left; color: var(--text); font-size: 18px; }

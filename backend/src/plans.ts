@@ -39,6 +39,8 @@ export type TierSpec = {
   maxBots: number;
   /** How many of those may be running at once. */
   maxRunning: number;
+  /** Directional bots: the quant one and the model driven one. */
+  strategyBots: boolean;
   aiBots: boolean;
   paidModels: boolean;
   features: string[];
@@ -55,11 +57,12 @@ export const TIERS: TierSpec[] = [
     dailyTrades: 0,
     maxBots: 3,
     maxRunning: 1,
+    strategyBots: false,
     aiBots: false,
     paidModels: false,
     features: [
       "Three bots saved, one running at a time",
-      "Standard bots that quote around the book",
+      "Market maker bots that quote both sides",
       "Model reads on demand, one contract at a time",
       "Full market history and settled results",
       "Positions, orders and P&L",
@@ -75,12 +78,14 @@ export const TIERS: TierSpec[] = [
     dailyTrades: 50,
     maxBots: 10,
     maxRunning: 3,
+    strategyBots: true,
     aiBots: true,
     paidModels: false,
     features: [
       "Everything in Free",
       "Ten bots saved, three running at once",
-      "AI bots priced from a model read",
+      "Quant bots that back one side on the maths",
+      "AI bots that back one side on a model read",
       "50 bot trades a day",
       "Free models, ranked by settled accuracy",
       "Pick which model runs each bot",
@@ -96,6 +101,7 @@ export const TIERS: TierSpec[] = [
     dailyTrades: 0,
     maxBots: 10,
     maxRunning: 5,
+    strategyBots: true,
     aiBots: true,
     paidModels: true,
     features: [

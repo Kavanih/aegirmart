@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAccount } from "wagmi";
-import { FaBrain, FaCoins, FaKey, FaPause, FaPen, FaPlay, FaRobot, FaSlidersH } from "react-icons/fa";
+import { FaBrain, FaCalculator, FaKey, FaPause, FaPen, FaPlay, FaRobot } from "react-icons/fa";
 import { fetchBotActivity, saveBot, stamp, windowLabel, type Bot, type BotStats, type BotSummary, type OrderRow } from "./api";
 import { AssetMark } from "./AssetMark";
 import { TableScroll, EmptyState } from "./Table";
@@ -63,12 +63,16 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
             </svg>
             Bots
           </button>
-          <span className={`bot-mark ${bot.kind}`}>{bot.kind === "ai" ? <FaBrain /> : <FaRobot />}</span>
+          <span className={`bot-mark ${bot.kind}`}>
+            {bot.kind === "ai" ? <FaBrain /> : bot.kind === "quant" ? <FaCalculator /> : <FaRobot />}
+          </span>
           <div>
             <h2>{bot.name}</h2>
             <p>
-              {bot.kind === "ai" ? "AI priced" : "Standard"} · {bot.asset === "BOTH" ? "BTC and ETH" : bot.asset} · ±
-              {Math.round(bot.spread * 100)}c · {bot.stake} tUSDC a quote
+              {bot.kind === "ai" ? "AI priced" : bot.kind === "quant" ? "Quant" : "Market maker"} ·{" "}
+              {bot.asset === "BOTH" ? "BTC and ETH" : bot.asset}
+              {bot.kind === "standard" && ` · ±${Math.round(bot.spread * 100)} cents`}
+              {bot.kind === "ai" && " · five minute windows"} · {bot.stake} tUSDC a trade
             </p>
           </div>
         </div>

@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import {
-  FaBrain, FaChartLine, FaCoins, FaCrown, FaKey, FaPause, FaPen, FaPlay, FaPlus, FaRobot, FaSlidersH, FaTrash,
+  FaBrain, FaCalculator, FaChartLine, FaCoins, FaCrown, FaKey, FaPause, FaPen, FaPlay, FaPlus, FaRobot,
+  FaSlidersH, FaTrash,
 } from "react-icons/fa";
 import { fetchBooks, fetchBots, removeBot, saveBot, type Bot, type BotLimits, type MarketBook, type Plan } from "./api";
 import { BotForm } from "./BotForm";
 import { BotDetail } from "./BotDetail";
 import { EmptyState } from "./Table";
+
+const KIND_MARK = { standard: <FaRobot />, quant: <FaCalculator />, ai: <FaBrain /> } as const;
+const KIND_NAME = { standard: "Market maker", quant: "Quant", ai: "AI priced" } as const;
 
 function shortModel(id: string | null): string {
   if (!id) return "best available";
@@ -119,10 +123,10 @@ export function BotPage() {
         <div className="pro-banner">
           <FaCrown className="pro-mark" aria-hidden="true" />
           <div>
-            <strong>AI bots are a pro feature</strong>
+            <strong>Directional bots are a paid feature</strong>
             <p>
-              A standard bot quotes around the book's own mid. A paid plan lets a model price the quotes and lets you
-              pick which model runs each bot. From 15 tUSDC a month.
+              A market maker quotes both sides and takes no view. A paid plan unlocks the two that pick a side: Quant
+              prices the contract itself, AI backs a model's read. From 15 tUSDC a month.
             </p>
           </div>
           <button className="ghost-btn" onClick={() => { window.location.hash = "#/pricing"; }}>See plans</button>
@@ -146,10 +150,10 @@ export function BotPage() {
                 aria-label={`Open ${bot.name}`}
               />
               <header>
-                <span className={`bot-mark ${bot.kind}`}>{bot.kind === "ai" ? <FaBrain /> : <FaRobot />}</span>
+                <span className={`bot-mark ${bot.kind}`}>{KIND_MARK[bot.kind]}</span>
                 <div className="bot-id">
                   <h4>{bot.name}</h4>
-                  <span className="bot-kind">{bot.kind === "ai" ? "AI priced" : "Standard"}</span>
+                  <span className="bot-kind">{KIND_NAME[bot.kind]}</span>
                 </div>
                 <span className={bot.status === "running" ? "bot-state on" : "bot-state"}>
                   {bot.status === "running" ? "Running" : "Paused"}

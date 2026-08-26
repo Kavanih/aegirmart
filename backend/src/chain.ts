@@ -33,6 +33,7 @@ export const binaryPoolAbi = parseAbi([
 
 export const ORDER_KIND = { BUY_YES: 0, SELL_YES: 1, BUY_NO: 2, SELL_NO: 3 } as const;
 /** Post-only: a quote that would cross is rejected rather than taking. */
+export const ORDER_TYPE_LIMIT = 0;
 export const ORDER_TYPE_POST_ONLY = 3;
 
 const DECIMALS = 6;
@@ -59,6 +60,12 @@ export type Quote = {
   /** Collateral to commit, in tUSDC. */
   stake: number;
   expiry: number;
+  /**
+   * Post only rests and never takes, which is what a market maker wants. A
+   * directional bot wants the opposite: if the book is offering something for
+   * less than it is worth, it should be allowed to cross and actually buy it.
+   */
+  taking?: boolean;
 };
 
 export type PlacedQuote = { hash: string; shares: number; price: number };
@@ -117,7 +124,7 @@ export async function placeQuote(privateKey: string, q: Quote): Promise<PlacedQu
         priceYes,
         quantity,
         BigInt(q.expiry) * 1_000_000_000n,
-        ORDER_TYPE_POST_ONLY,
+        q.taking ? ORDER_TYPE_LIMIT : ORDER_TYPE_POST_ONLY,
         0,
         "0x0000000000000000000000000000000000000000" as Address,
         0n,

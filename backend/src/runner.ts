@@ -1,5 +1,6 @@
 import { liveMarkets, liveBooks, type Market } from "./markets.js";
-import { runningBots, openBotKey, recordBotFill, type Bot } from "./bots.js";
+import { runningBots, openBotKey, recordBotFill, AI_MIN_INTERVAL, type Bot } from "./bots.js";
+import { buildEvidence } from "./quant.js";
 import { cachedPrediction } from "./tracker.js";
 import { placeQuote } from "./chain.js";
 
@@ -18,6 +19,8 @@ import { placeQuote } from "./chain.js";
  */
 const CYCLE_MS = Number(process.env.RUNNER_CYCLE_MS ?? 20_000);
 const LANES = [60, 300];
+/** How far a price must sit from fair before a directional bot will act. */
+const MIN_EDGE = Number(process.env.MIN_EDGE ?? 0.05);
 /** The venue's price grid, so a back off lands on a legal price. */
 const TICK = 0.001;
 
@@ -35,19 +38,80 @@ function bookMid(bids: { price: number }[], asks: { price: number }[]): number |
 }
 
 function wants(bot: Bot, market: Market): boolean {
-  return bot.asset === "BOTH" || bot.asset === market.asset;
+  if (bot.asset !== "BOTH" && bot.asset !== market.asset) return false;
+  // A model read takes tens of seconds. On a sixty second window the answer
+  // arrives against a spot that has already moved, so an AI bot sits those out.
+  if (bot.kind === "ai" && market.intervalSec < AI_MIN_INTERVAL) return false;
+  return true;
 }
 
 /**
- * What the bot thinks YES is worth. A standard bot follows the book; an AI bot
- * follows its stored read and declines to quote without one.
+ * What the bot thinks the UP side is worth.
+ *
+ * A market maker has no view and follows the book. A quant bot prices the
+ * contract itself from spot, strike, time left and realised volatility. An AI
+ * bot uses its stored read and sits out where it has none.
  */
-function fairValue(bot: Bot, market: Market, mid: number | null): number | null {
+async function fairValue(bot: Bot, market: Market, mid: number | null): Promise<number | null> {
   if (bot.kind === "ai") {
     const read = cachedPrediction(market.marketId);
     return read ? read.probability : null;
   }
+
+  if (bot.kind === "quant") {
+    try {
+      const evidence = await buildEvidence(market);
+      return evidence.modelProbability;
+    } catch {
+      // No spot or no history: nothing to price against, so do not guess.
+      return null;
+    }
+  }
+
   return mid ?? market.lastPrice ?? 0.5;
+}
+
+type Leg = readonly ["yes" | "no", number];
+
+/**
+ * A two sided quote around fair, backed off so it rests instead of crossing.
+ * Post only refuses anything through the touch, so pricing there just burns
+ * gas; a tick inside the book is the widest that will actually rest.
+ */
+function makerLegs(fair: number, spread: number, bestBid: number | null, bestAsk: number | null): Leg[] {
+  let bid = Math.min(0.97, Math.max(0.02, fair - spread));
+  let offer = Math.min(0.97, Math.max(0.02, fair + spread));
+  if (bestAsk !== null) bid = Math.min(bid, bestAsk - TICK);
+  if (bestBid !== null) offer = Math.max(offer, bestBid + TICK);
+
+  // Backing off can invert the quote where the book is tighter than the bot's
+  // spread. There is nothing to add there, so sit the market out.
+  if (bid <= 0.02 || offer >= 0.98 || bid >= offer) return [];
+  return [["yes", bid], ["no", 1 - offer]];
+}
+
+/**
+ * One side, and only when the book is wrong by enough to be worth acting on.
+ *
+ * If YES can be bought for less than it is worth, buy YES. If YES is being bid
+ * ABOVE what it is worth then NO is the cheap side, so buy that instead. Where
+ * the book already agrees with fair there is no bet here, only fees.
+ */
+function directionalLeg(fair: number, bestBid: number | null, bestAsk: number | null): Leg[] {
+  if (bestAsk !== null && fair - bestAsk >= MIN_EDGE) {
+    return [["yes", Math.min(0.97, fair)]];
+  }
+  if (bestBid !== null && bestBid - fair >= MIN_EDGE) {
+    // Buying NO at its own price, which is the complement of the YES bid.
+    return [["no", Math.min(0.97, 1 - fair)]];
+  }
+  // With no book to disagree with, back the side fair itself favours, but only
+  // when the read is decisive rather than a coin toss.
+  if (bestBid === null && bestAsk === null) {
+    if (fair >= 0.5 + MIN_EDGE) return [["yes", Math.min(0.97, fair)]];
+    if (fair <= 0.5 - MIN_EDGE) return [["no", Math.min(0.97, 1 - fair)]];
+  }
+  return [];
 }
 
 async function cycle(): Promise<void> {
@@ -77,29 +141,20 @@ async function cycle(): Promise<void> {
       if (bot.dailyTrades > 0 && bot.tradesToday >= bot.dailyTrades) break;
 
       const book = bookByMarket.get(market.marketId);
-      const fair = fairValue(bot, market, bookMid(book?.bids ?? [], book?.asks ?? []));
-      if (fair === null) continue;
-
-      // Keep both legs off the extremes: a bid at 0 or 1 is not a quote.
-      let bid = Math.min(0.97, Math.max(0.02, fair - bot.spread));
-      let offer = Math.min(0.97, Math.max(0.02, fair + bot.spread));
-
-      // Stay inside the resting book. A post only order that would cross is
-      // refused on chain, so pricing through the touch just burns gas and
-      // fills the log with reverts. Back off by a tick instead.
       const bestBid = book?.bids[0]?.price ?? null;
       const bestAsk = book?.asks[0]?.price ?? null;
-      if (bestAsk !== null) bid = Math.min(bid, bestAsk - TICK);
-      if (bestBid !== null) offer = Math.max(offer, bestBid + TICK);
+      const fair = await fairValue(bot, market, bookMid(book?.bids ?? [], book?.asks ?? []));
+      if (fair === null) continue;
 
-      // Backing off can invert the quote when the book is tighter than the
-      // bot's spread. There is nothing to add there, so sit the market out.
-      if (bid <= 0.02 || offer >= 0.98 || bid >= offer) continue;
+      const legs = bot.kind === "standard"
+        ? makerLegs(fair, bot.spread, bestBid, bestAsk)
+        : directionalLeg(fair, bestBid, bestAsk);
+      if (legs.length === 0) continue;
 
       // Claim the slot before awaiting, so a slow cycle cannot double quote.
       quoted.set(mark, market.expiry);
 
-      for (const [side, price] of [["yes", bid], ["no", 1 - offer]] as const) {
+      for (const [side, price] of legs) {
         // Checked per ORDER, not per market. A market places two, so testing
         // once outside this loop let the cap overshoot by one every time.
         if (bot.dailyTrades > 0 && bot.tradesToday >= bot.dailyTrades) break;
@@ -111,6 +166,9 @@ async function cycle(): Promise<void> {
           price,
           stake: bot.stake,
           expiry: market.expiry,
+          // A market maker rests and never takes. A directional bot is buying
+          // something it thinks is cheap, so it is allowed to cross for it.
+          taking: bot.kind !== "standard",
         });
 
         if ("error" in result) {

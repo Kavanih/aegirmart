@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaBolt, FaBrain, FaCrown, FaKey, FaRobot, FaShieldAlt, FaTimes } from "react-icons/fa";
+import { FaBolt, FaBrain, FaCalculator, FaCrown, FaKey, FaRobot, FaShieldAlt, FaTimes } from "react-icons/fa";
 import { fetchModels, saveBot, storeBotKey, type Bot, type BotDraft, type BotKind, type Plan } from "./api";
 
 type Props = {
@@ -13,6 +13,27 @@ type Props = {
 };
 
 const ASSETS = ["BTC", "ETH", "BOTH"] as const;
+
+const KINDS: { id: BotKind; name: string; blurb: string; icon: JSX.Element }[] = [
+  {
+    id: "standard",
+    name: "Market maker",
+    blurb: "Quotes both sides and earns the gap. Takes no view on the outcome.",
+    icon: <FaRobot />,
+  },
+  {
+    id: "quant",
+    name: "Quant",
+    blurb: "Prices the contract from spot, time left and volatility, then backs one side when the book disagrees.",
+    icon: <FaCalculator />,
+  },
+  {
+    id: "ai",
+    name: "AI",
+    blurb: "Backs one side on a model's read. Five minute windows only, since a read takes too long for sixty seconds.",
+    icon: <FaBrain />,
+  },
+];
 
 /** The bot just created is the newest one this wallet owns. */
 async function latestBotId(address: string): Promise<string | null> {
@@ -35,7 +56,8 @@ export function BotForm({ address, plan, proPrice, editing, keyStorage, onClose,
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const isPro = plan.plan === "pro";
+  // Both directional strategies sit behind a paid plan.
+  const isPro = plan.plan !== "free";
 
   useEffect(() => {
     // Only a pro bot names a model, so only fetch the catalogue when it can.
@@ -103,33 +125,26 @@ export function BotForm({ address, plan, proPrice, editing, keyStorage, onClose,
         <fieldset className="field">
           <legend>Strategy</legend>
           <div className="kind-grid">
-            <button
-              type="button"
-              className={kind === "standard" ? "kind on" : "kind"}
-              onClick={() => setKind("standard")}
-              aria-pressed={kind === "standard"}
-            >
-              <FaRobot />
-              <span className="kind-name">Standard</span>
-              <span className="kind-sub">Quotes both sides around the book mid</span>
-            </button>
-
-            <button
-              type="button"
-              className={kind === "ai" ? "kind on" : "kind"}
-              onClick={() => isPro && setKind("ai")}
-              aria-pressed={kind === "ai"}
-              disabled={!isPro}
-              title={isPro ? "Price quotes from a model" : `Pro plan, ${proPrice} tUSDC a month`}
-            >
-              <FaBrain />
-              <span className="kind-name">
-                AI {!isPro && <FaCrown className="kind-lock" aria-label="pro only" />}
-              </span>
-              <span className="kind-sub">
-                {isPro ? "Prices quotes from a model read" : `Pro plan · ${proPrice} tUSDC a month`}
-              </span>
-            </button>
+            {KINDS.map((k) => {
+              const locked = k.id !== "standard" && !isPro;
+              return (
+                <button
+                  key={k.id}
+                  type="button"
+                  className={kind === k.id ? "kind on" : "kind"}
+                  onClick={() => !locked && setKind(k.id)}
+                  aria-pressed={kind === k.id}
+                  disabled={locked}
+                  title={locked ? `Starter plan, from ${proPrice} tUSDC a month` : k.blurb}
+                >
+                  {k.icon}
+                  <span className="kind-name">
+                    {k.name} {locked && <FaCrown className="kind-lock" aria-label="paid plan only" />}
+                  </span>
+                  <span className="kind-sub">{locked ? `Paid plan · from ${proPrice} tUSDC a month` : k.blurb}</span>
+                </button>
+              );
+            })}
           </div>
         </fieldset>
 
@@ -169,6 +184,13 @@ export function BotForm({ address, plan, proPrice, editing, keyStorage, onClose,
             </div>
           </label>
         </div>
+
+        {kind === "ai" && (
+          <p className="field-note lane-note">
+            <FaBolt aria-hidden="true" /> AI bots trade the five minute lane only. A model read takes tens of seconds,
+            which a sixty second window cannot wait for.
+          </p>
+        )}
 
         {kind === "ai" && (
           <label className="field">
