@@ -289,5 +289,11 @@ app.get("/api/accuracy", (_req, res) => {
 app.listen(PORT, () => {
   console.log(`backend listening on http://localhost:${PORT}`);
   console.log(`openrouter key ${API_KEY ? "loaded" : "MISSING, predictions degrade to unavailable"}`);
-  startTracker(API_KEY);
+  // Opt out without editing code: the tracker is the only thing that spends
+  // the daily model allowance on its own, so it has to be stoppable.
+  if (process.env.TRACKER_ENABLED === "false") {
+    console.log("tracker disabled by TRACKER_ENABLED=false, no model calls will be made");
+  } else {
+    startTracker(API_KEY);
+  }
 });
