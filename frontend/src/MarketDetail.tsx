@@ -25,6 +25,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
   const [data, setData] = useState<Detail | null>(null);
   const [missing, setMissing] = useState(false);
   const [side, setSide] = useState<"up" | "down">("up");
+  const [sidePicked, setSidePicked] = useState(false);
   const [stake, setStake] = useState(5);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const [book, setBook] = useState<MarketBook | null>(null);
@@ -98,10 +99,22 @@ export function MarketDetail({ marketId, onBack }: Props) {
 
   // The order the ticket would place: the model's price where there is a read,
   // otherwise the book's own offer on that leg.
+  // The model's price where there is a read, then the offer on that leg, then
+  // the best bid as a last resort. A leg with nothing offered can still be bid
+  // for, so leaving the ticket blank there told the operator nothing.
   const ticketPrice = side === "up"
-    ? modelUp ?? bestAskUp
-    : modelUp !== null ? 1 - modelUp : bestBidUp === null ? null : 1 - bestBidUp;
+    ? modelUp ?? bestAskUp ?? bestBidUp
+    : modelUp !== null
+      ? 1 - modelUp
+      : bestBidUp !== null
+        ? 1 - bestBidUp
+        : bestAskUp !== null
+          ? 1 - bestAskUp
+          : null;
   const shares = ticketPrice && ticketPrice > 0 ? stake / ticketPrice : null;
+  // An order fills now only when something is already offered at or under it.
+  const legAsk = side === "up" ? bestAskUp : bestBidUp === null ? null : 1 - bestBidUp;
+  const fillsNow = ticketPrice !== null && legAsk !== null && ticketPrice >= legAsk;
 
   const onBuy = () => {
     if (!isConnected) return toast.push("error", "Connect a wallet first");
@@ -165,7 +178,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
           {/* The underlying against the strike, because that is what decides
               this contract. The book is too thin to draw a price history from. */}
           {path.length >= 2 ? (
-            <Sparkline points={path} target={market.strike} height={266} />
+            <Sparkline points={path} target={market.strike} height={306} />
           ) : (
             <p className="read-idle">
               The price path for this window is no longer retained. Only the last hour of strikes is kept.
@@ -175,6 +188,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
 
         <section className="outcomes">
           <h3>Outcomes</h3>
+          <p className="section-hint">What each side costs to buy right now, and what it pays if it wins.</p>
           {(["up", "down"] as const).map((leg) => {
             const marketPrice = leg === "up" ? upMarket : downMarket;
             const model = modelUp === null ? null : leg === "up" ? modelUp : 1 - modelUp;
@@ -184,37 +198,43 @@ export function MarketDetail({ marketId, onBack }: Props) {
             return (
               <div key={leg} className={`outcome-row ${leg}`}>
                 <span className={`pos-side ${leg}`}>{leg.toUpperCase()}</span>
+
+                <span className="outcome-lead">
+                  {ask === null ? (
+                    <em className="read-idle">nothing offered</em>
+                  ) : (
+                    <>
+                      <span className="outcome-price">{Math.round(ask * 100)}c</span>
+                      <span className="outcome-sub">pays {(1 / ask).toFixed(2)}x</span>
+                    </>
+                  )}
+                </span>
+
                 <span className="outcome-figure">
-                  {model === null ? <em className="read-idle">no model read</em> : `${Math.round(model * 100)}%`}
+                  {model === null ? <em className="read-idle">no read</em> : `${Math.round(model * 100)}%`}
                   <span className="outcome-sub">model</span>
                 </span>
-                <span className="outcome-figure">
-                  {marketPrice === null ? <em className="read-idle">no book</em> : `${Math.round(marketPrice * 100)}c`}
-                  <span className="outcome-sub">market</span>
-                </span>
-                <span className="outcome-figure">
-                  {ask === null ? <em className="read-idle">nothing offered</em> : `${Math.round(ask * 100)}c`}
-                  <span className="outcome-sub">to buy</span>
-                </span>
-                <span className="outcome-figure">
-                  {ask === null ? <em className="read-idle">--</em> : `${(1 / ask).toFixed(2)}x`}
-                  <span className="outcome-sub">payout</span>
-                </span>
+
                 <span className="outcome-figure">
                   {(leg === "up" ? upDepth : downDepth).toFixed(2)}
                   <span className="outcome-sub">available</span>
                 </span>
+
                 <span className="outcome-figure">
-                  {held(leg) ? held(leg)!.shares.toFixed(2) : <em className="read-idle">none</em>}
+                  {held(leg) ? held(leg)!.shares.toFixed(2) : "0.00"}
                   <span className="outcome-sub">you hold</span>
                 </span>
+
                 <button
                   className={`mini ${leg}`}
                   disabled={!live}
-                  onClick={() => setSide(leg)}
+                  onClick={() => {
+                    setSide(leg);
+                    setSidePicked(true);
+                  }}
                   title={live ? `Take the ${leg} side` : "This window has closed"}
                 >
-                  Buy {leg === "up" ? "Up" : "Down"} {ask !== null && `${Math.round(ask * 100)}c`}
+                  Buy {leg === "up" ? "Up" : "Down"}
                 </button>
               </div>
             );
@@ -239,6 +259,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
 
         <section className="detail-prints">
           <h3>Trades</h3>
+          <p className="section-hint">Every fill on this contract, newest last.</p>
           {trades.length === 0 ? (
             <p className="read-idle">Nothing has traded on this contract yet.</p>
           ) : (
@@ -282,6 +303,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
           <span>{title(market)}</span>
         </div>
 
+        <p className="ticket-label">Pick a side</p>
         <div className="ticket-sides">
           {(["up", "down"] as const).map((leg) => {
             const price = leg === "up" ? bestAskUp : bestBidUp === null ? null : 1 - bestBidUp;
@@ -289,17 +311,25 @@ export function MarketDetail({ marketId, onBack }: Props) {
               <button
                 key={leg}
                 className={side === leg ? `ticket-side ${leg} on` : `ticket-side ${leg}`}
-                onClick={() => setSide(leg)}
+                onClick={() => {
+                  setSide(leg);
+                  setSidePicked(true);
+                }}
                 aria-pressed={side === leg}
               >
-                {leg === "up" ? "Up" : "Down"} {price === null ? "--" : `${Math.round(price * 100)}c`}
+                <span className="ticket-side-name">{leg === "up" ? "Up" : "Down"}</span>
+                <span className="ticket-side-price">
+                  {price === null ? "no offers" : `${Math.round(price * 100)}c`}
+                </span>
               </button>
             );
           })}
         </div>
 
+        <p className="ticket-label">Amount</p>
         <StakePanel stake={stake} onChange={setStake} percentOfBalance />
 
+        <p className="ticket-label">Your order</p>
         {/* What the order actually does, before it is signed. */}
         <dl className="ticket-preview">
           <div>
@@ -313,6 +343,12 @@ export function MarketDetail({ marketId, onBack }: Props) {
           <div>
             <dt>Pays if right</dt>
             <dd className="pays">{shares === null ? "--" : shares.toFixed(2)}</dd>
+          </div>
+          <div className="ticket-preview-wide">
+            <dt>Fills</dt>
+            <dd className={fillsNow ? "pays" : ""}>
+              {fillsNow ? "Immediately, against a resting offer" : "Only if someone crosses it"}
+            </dd>
           </div>
           <div>
             <dt>You hold</dt>

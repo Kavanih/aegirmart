@@ -43,6 +43,11 @@ export function StakePanel({ stake, onChange, percentOfBalance = false }: Props)
           <span className="stake-avail">
             {isConnected ? `Available ${available.toFixed(2)} ${TUSDC.symbol}` : "Paper mode until a wallet connects"}
           </span>
+          {stake > 0 && (
+            <button type="button" className="stake-clear" onClick={() => onChange(0)}>
+              Clear
+            </button>
+          )}
         </div>
 
         <label className="stake-input">
@@ -84,9 +89,6 @@ export function StakePanel({ stake, onChange, percentOfBalance = false }: Props)
           title={isConnected ? "Use the whole balance" : "Connect a wallet first"}
         >
           Max
-        </button>
-        <button className="stake ghost" onClick={() => onChange(0)} disabled={stake === 0}>
-          Clear
         </button>
       </div>
 

@@ -857,11 +857,16 @@ button.logo:hover .wordmark span { color: var(--text); }
 .key-line.spot { color: var(--up); }
 
 .outcomes h3, .detail-read h3, .detail-prints h3 { font-size: 13px; margin: 0 0 10px; font-weight: 650; }
-.outcome-row { display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin-bottom: 8px;
+.outcome-row { display: flex; align-items: center; gap: 18px; padding: 15px 16px; margin-bottom: 9px;
   flex-wrap: wrap;
   border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }
-.outcome-figure { display: flex; flex-direction: column; gap: 2px; font-size: 16px; font-weight: 650;
-  font-variant-numeric: tabular-nums; min-width: 80px; }
+.outcome-figure { display: flex; flex-direction: column; gap: 2px; font-size: 15px; font-weight: 600;
+  font-variant-numeric: tabular-nums; min-width: 74px; color: var(--muted); }
+/* The price you would actually pay leads the row; the rest is supporting. */
+.outcome-lead { display: flex; flex-direction: column; gap: 2px; min-width: 108px; }
+.outcome-price { font-size: 25px; font-weight: 700; letter-spacing: -0.02em; color: var(--text);
+  font-variant-numeric: tabular-nums; line-height: 1; }
+.section-hint { margin: -6px 0 12px; font-size: 11.5px; color: var(--muted); }
 .outcome-sub { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--muted); }
 .outcome-row .mini { margin-left: auto; padding: 8px 18px; }
@@ -871,21 +876,42 @@ button.logo:hover .wordmark span { color: var(--text); }
 .read-meta { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 11px; color: var(--muted); }
 
 /* ---- Trade ticket ---- */
-.ticket { position: sticky; top: 78px; display: flex; flex-direction: column; gap: 12px;
-  border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 15px; }
-.ticket-head { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 650; }
+.ticket { position: sticky; top: 78px; display: flex; flex-direction: column; gap: 10px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--surface);
+  padding: 18px 17px 16px; min-height: 520px; }
+/* The confirm sits at the foot whatever the panel holds above it. */
+.ticket-cta { margin-top: auto; }
+.ticket-head { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 650;
+  padding-bottom: 13px; border-bottom: 1px solid var(--line); }
+.ticket-label { margin: 6px 0 0; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--muted); }
 .ticket-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.ticket-side { padding: 11px 0; border-radius: 9px; font-size: 13px; font-weight: 650; cursor: pointer;
+.ticket-side { display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 11px 0; border-radius: 10px; cursor: pointer;
   background: var(--surface-2); border: 1px solid var(--line); color: var(--muted); }
+.ticket-side-name { font-size: 13px; font-weight: 650; }
+.ticket-side-price { font-size: 11px; opacity: 0.8; font-variant-numeric: tabular-nums; }
 .ticket-side.up.on { background: var(--up-bg); border-color: var(--up-line); color: var(--up-fg); }
 .ticket-side.down.on { background: var(--down-bg); border-color: var(--down-line); color: var(--down-fg); }
-.ticket .stake-panel { margin-bottom: 0; padding: 0; border: none; background: none; }
+.ticket .stake-panel { margin-bottom: 0; padding: 12px 13px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--surface-2); gap: 10px; }
+.ticket .stake-panel header { align-items: flex-start; }
+/* Four across, so nothing wraps onto a line of its own. */
+.ticket .stake-quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.ticket .stake-quick .stake { padding: 7px 0; font-size: 11.5px; }
+
+/* Sits with the Amount label it clears, not floating over the panel. */
+.stake-clear { align-self: flex-start; margin-top: 2px; background: none; border: none; padding: 0;
+  cursor: pointer; font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--muted); }
+.stake-clear:hover { color: var(--down); }
 
 .ticket-cta { padding: 13px 0; border: none; border-radius: 10px; cursor: pointer;
   background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 700; }
 .ticket-cta:hover:not(:disabled) { filter: brightness(1.08); }
 .ticket-cta:disabled { background: var(--surface-2); color: var(--muted); cursor: default; }
-.ticket-fine { margin: 0; font-size: 10.5px; line-height: 1.55; color: var(--muted); }
+.ticket-fine { margin: 0; padding-top: 12px; border-top: 1px solid var(--line);
+  font-size: 10.5px; line-height: 1.55; color: var(--muted); }
 
 /* The card title is a link to the contract, but must not look like a button.
    Its ::after stretches over the whole card so the entire tile opens the
@@ -1170,13 +1196,16 @@ button.logo:hover .wordmark span { color: var(--text); }
 .detail-pill.open { color: var(--up); border-color: var(--up-line); background: var(--up-bg); }
 
 /* What the order does, before it is signed. */
-.ticket-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin: 0;
-  padding: 12px 13px; background: var(--surface-2); border-radius: 10px; }
+.ticket-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 11px 12px; margin: 0;
+  padding: 12px 13px; background: var(--surface-2); border-radius: 10px;
+  border: 1px solid var(--line); }
 .ticket-preview div { min-width: 0; }
 .ticket-preview dt { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.07em;
   color: var(--muted); margin-bottom: 3px; }
 .ticket-preview dd { margin: 0; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ticket-preview dd.pays { color: var(--up); }
+.ticket-preview-wide { grid-column: 1 / -1; }
+.ticket-preview-wide dd { font-size: 11.5px; font-weight: 500; white-space: normal; }
 
 .addr-cell { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
