@@ -9,6 +9,7 @@ import { predict, quotaBlockedFor, freeModels } from "./openrouter.js";
 import { TtlCache, RateLimiter } from "./cache.js";
 import { botsFor, createBot, updateBot, deleteBot, setBotKey, clearBotKey, planFor, MAX_BOTS, PRO_PRICE, ASSETS, KINDS } from "./bots.js";
 import { keyStorageReady } from "./keys.js";
+import { startRunner } from "./runner.js";
 import { claimLiveSpend, budgetStatus } from "./budget.js";
 import type { PredictionResult } from "./openrouter.js";
 
@@ -416,4 +417,5 @@ app.listen(PORT, () => {
   } else {
     startTracker(API_KEY);
   }
+  startRunner();
 });

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { seal, normalizeKey, keyStorageReady, type SealedKey } from "./keys.js";
+import { seal, open as openSealed, normalizeKey, keyStorageReady, type SealedKey } from "./keys.js";
 
 /**
  * Bot definitions and plan state.
@@ -39,6 +39,9 @@ export type Bot = {
   updatedAt: number;
   /** Never serialised to a client. See publicBot(). */
   key?: SealedKey;
+  /** Orders placed today, against the daily cap. Rolls on the UTC date. */
+  tradesToday: number;
+  tradeDay: string;
 };
 
 /** A bot as the client may see it: the sealed key is replaced by its address. */
@@ -71,6 +74,35 @@ function persist(): void {
   } catch {
     // A lost write costs a definition, never the request in flight.
   }
+}
+
+function utcDay(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Bots that are switched on AND hold a key, so the runner can act for them. */
+export function runningBots(): Bot[] {
+  return Object.values(bots)
+    .filter((b) => b.status === "running" && b.key)
+    .map((b) => (b.tradeDay === utcDay() ? b : { ...b, tradesToday: 0, tradeDay: utcDay() }));
+}
+
+/**
+ * The plaintext key for one bot. Only the runner calls this, and it holds the
+ * result no longer than a cycle.
+ */
+export function openBotKey(id: string): string | null {
+  const bot = bots[id];
+  return bot?.key ? openSealed(bot.key) : null;
+}
+
+export function recordBotFill(id: string): void {
+  const bot = bots[id];
+  if (!bot) return;
+  const day = utcDay();
+  bot.tradesToday = bot.tradeDay === day ? bot.tradesToday + 1 : 1;
+  bot.tradeDay = day;
+  persist();
 }
 
 export function planFor(addressRaw: string): Plan {
@@ -127,7 +159,9 @@ export function clearBotKey(addressRaw: string, id: string): boolean {
 
 export type BotDraft = Partial<Pick<Bot, "name" | "kind" | "asset" | "stake" | "dailyTrades" | "spread" | "model" | "status">>;
 
-function clean(draft: BotDraft, plan: Plan, current?: Bot): { bot: Omit<Bot, "id" | "address" | "createdAt" | "updatedAt"> } | { error: string } {
+type BotFields = Pick<Bot, "name" | "kind" | "asset" | "stake" | "dailyTrades" | "spread" | "model" | "status">;
+
+function clean(draft: BotDraft, plan: Plan, current?: Bot): { bot: BotFields } | { error: string } {
   const kind = draft.kind ?? current?.kind ?? "standard";
   if (!KINDS.includes(kind)) return { error: "kind must be standard or ai" };
   if (kind === "ai" && plan.plan !== "pro") return { error: `An AI bot needs the pro plan (${PRO_PRICE} tUSDC a month)` };
@@ -166,7 +200,11 @@ export function createBot(addressRaw: string, draft: BotDraft): { bot: PublicBot
   if ("error" in checked) return checked;
 
   const now = Date.now();
-  const bot: Bot = { id: randomUUID(), address, createdAt: now, updatedAt: now, ...checked.bot };
+  const bot: Bot = {
+    ...checked.bot,
+    id: randomUUID(), address, createdAt: now, updatedAt: now,
+    tradesToday: 0, tradeDay: utcDay(),
+  };
   bots[bot.id] = bot;
   persist();
   return { bot: publicBot(bot) };
