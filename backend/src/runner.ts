@@ -100,6 +100,10 @@ async function cycle(): Promise<void> {
       quoted.set(mark, market.expiry);
 
       for (const [side, price] of [["yes", bid], ["no", 1 - offer]] as const) {
+        // Checked per ORDER, not per market. A market places two, so testing
+        // once outside this loop let the cap overshoot by one every time.
+        if (bot.dailyTrades > 0 && bot.tradesToday >= bot.dailyTrades) break;
+
         const result = await placeQuote(key, {
           pool: market.poolAddress as `0x${string}`,
           collateral: market.collateral as `0x${string}`,
@@ -118,7 +122,8 @@ async function cycle(): Promise<void> {
           continue;
         }
 
-        recordBotFill(bot.id);
+        recordBotFill(bot.id, market.marketId);
+        bot.tradesToday += 1;
         log(`${bot.name} ${market.asset} ${market.intervalSec}s ${side} ${result.shares.toFixed(2)}@${Math.round(result.price * 100)}c`);
       }
     }

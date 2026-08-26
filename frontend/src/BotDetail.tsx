@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import { FaBrain, FaCoins, FaKey, FaPause, FaPen, FaPlay, FaRobot, FaSlidersH } from "react-icons/fa";
-import { fetchBotActivity, saveBot, stamp, windowLabel, type Bot, type BotSummary, type OrderRow } from "./api";
+import { fetchBotActivity, saveBot, stamp, windowLabel, type Bot, type BotStats, type BotSummary, type OrderRow } from "./api";
 import { AssetMark } from "./AssetMark";
 import { TableScroll, EmptyState } from "./Table";
 
@@ -21,6 +21,7 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
   const [bot, setBot] = useState<Bot | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [summary, setSummary] = useState<BotSummary | null>(null);
+  const [stats, setStats] = useState<BotStats | null>(null);
   const [missing, setMissing] = useState(false);
 
   const load = useCallback(() => {
@@ -30,6 +31,7 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
       setBot(d.bot);
       setOrders(d.orders);
       setSummary(d.summary);
+      setStats(d.stats);
     });
   }, [address, botId]);
 
@@ -83,16 +85,35 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
       </div>
 
       <div className="stat-grid">
+        <Stat
+          label="Win rate"
+          value={stats && stats.settled ? `${Math.round(stats.winRate * 100)}%` : "--"}
+          tone={stats && stats.settled ? (stats.winRate >= 0.5 ? "good" : "bad") : undefined}
+        />
+        <Stat
+          label="Realised P&L"
+          value={stats ? `${stats.realised >= 0 ? "+" : ""}${stats.realised.toFixed(2)}` : "--"}
+          tone={stats ? (stats.realised >= 0 ? "good" : "bad") : undefined}
+        />
+        <Stat
+          label="Total loss"
+          value={stats ? stats.lost.toFixed(2) : "--"}
+          tone={stats && stats.lost > 0 ? "bad" : undefined}
+        />
+        <Stat label="Settled" value={stats ? String(stats.settled) : "--"} />
         <Stat label="Trades today" value={capped ? `${bot.tradesToday}/${bot.dailyTrades}` : String(bot.tradesToday)} />
-        <Stat label="Filled" value={summary ? String(summary.filled) : "--"} tone={summary && summary.filled > 0 ? "good" : undefined} />
-        <Stat label="Resting" value={summary ? String(summary.open) : "--"} />
-        <Stat label="Expired" value={summary ? String(summary.expired) : "--"} />
-        <Stat label="Volume filled" value={summary ? summary.volume.toFixed(2) : "--"} />
         <Stat
           label="Allowance left"
           value={left === null ? "no cap" : String(left)}
           tone={left !== null && left === 0 ? "bad" : undefined}
         />
+      </div>
+
+      <div className="stat-grid">
+        <Stat label="Filled" value={summary ? String(summary.filled) : "--"} tone={summary && summary.filled > 0 ? "good" : undefined} />
+        <Stat label="Resting" value={summary ? String(summary.open) : "--"} />
+        <Stat label="Expired" value={summary ? String(summary.expired) : "--"} />
+        <Stat label="Volume filled" value={summary ? summary.volume.toFixed(2) : "--"} />
       </div>
 
       <p className={bot.keyAddress ? "bot-signer set" : "bot-signer"}>

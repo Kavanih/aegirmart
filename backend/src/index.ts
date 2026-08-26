@@ -7,8 +7,9 @@ import { allStats } from "./modelStats.js";
 import { buildEvidence } from "./quant.js";
 import { predict, quotaBlockedFor, freeModels } from "./openrouter.js";
 import { TtlCache, RateLimiter } from "./cache.js";
-import { botsFor, createBot, updateBot, deleteBot, setBotKey, clearBotKey, planFor, MAX_BOTS, PRO_PRICE, ASSETS, KINDS } from "./bots.js";
+import { botsFor, createBot, updateBot, deleteBot, setBotKey, clearBotKey, planFor, botMarketsFor, MAX_BOTS, PRO_PRICE, ASSETS, KINDS } from "./bots.js";
 import { keyStorageReady } from "./keys.js";
+import { pricedPositionsFor, summarise } from "./positions.js";
 import { TIERS, TREASURY, COLLATERAL, redeem, subscriptionFor, priceOf, type Tier, type Cycle } from "./plans.js";
 import { startRunner } from "./runner.js";
 import { claimLiveSpend, budgetStatus } from "./budget.js";
@@ -184,61 +185,15 @@ app.get("/api/positions", async (req, res) => {
     return;
   }
   try {
-    // Basis and redemptions are best effort: an outage must not hide positions.
-    const [positions, basis, redemptions] = await Promise.all([
-      positionsFor(address, 100),
-      costBasisFor(address).catch((): BasisIndex => ({})),
-      redemptionsFor(address).catch((): Awaited<ReturnType<typeof redemptionsFor>> => []),
-    ]);
+    const priced = await pricedPositionsFor(address);
 
-    const redeemed = new Map(redemptions.map((r) => [`${r.marketId}:${r.outcomeIndex}`, r]));
+    // A bot signing with this same wallet is indistinguishable on chain, so
+    // the only way to keep its churn out of the profile is to remember which
+    // markets it quoted and drop those.
+    const botMarkets = botMarketsFor(address);
+    const mine = botMarkets.size > 0 ? priced.filter((p) => !botMarkets.has(p.marketId)) : priced;
 
-    // Holding BOTH legs of a market means a complete set was minted: collateral
-    // in, one leg pays it back, the other expires. The overlap is a wash, not a
-    // win, and pricing the legs separately is what made it read as free money.
-    const held = new Map<string, Map<number, number>>();
-    for (const p of positions) {
-      const paid = redeemed.get(`${p.marketId}:${p.outcomeIndex}`);
-      const size = p.size > 0 ? p.size : paid?.burned ?? 0;
-      const legs = held.get(p.marketId) ?? new Map<number, number>();
-      legs.set(p.outcomeIndex, (legs.get(p.outcomeIndex) ?? 0) + size);
-      held.set(p.marketId, legs);
-    }
-
-    const priced = positions.map((p) => {
-      const entry = basis[p.marketId]?.[p.outcomeIndex];
-      const paid = redeemed.get(`${p.marketId}:${p.outcomeIndex}`);
-
-      // Prefer what was actually redeemed. It is the only figure that survives
-      // the claim, so P&L no longer moves when somebody collects.
-      const shares = p.size > 0 ? p.size : paid?.burned ?? entry?.shares ?? 0;
-      const won = p.finalized && p.winningOutcome === p.outcomeIndex;
-      const payout = paid ? paid.collateralOut : p.finalized ? (won ? shares : 0) : null;
-
-      const legs = held.get(p.marketId);
-      const other = legs ? legs.get(p.outcomeIndex === 0 ? 1 : 0) ?? 0 : 0;
-      const pairedShares = Math.min(shares, other);
-
-      // A minted set costs one collateral per unit and returns one on the
-      // winning leg. Charging that cost to the leg that pays makes the pair
-      // net to zero across the two rows instead of inventing a profit.
-      const mintedCost = won ? pairedShares : 0;
-      const cost = entry ? entry.cost + mintedCost : pairedShares > 0 ? mintedCost : null;
-
-      return {
-        ...p,
-        shares,
-        won: p.finalized ? won : null,
-        pairedShares,
-        /** True when this leg is offset by the other one: a wash, not a result. */
-        minted: pairedShares > 0,
-        cost,
-        averagePrice: entry?.averagePrice ?? null,
-        pnl: cost !== null && payout !== null ? payout - cost : null,
-      };
-    });
-
-    res.json({ positions: priced });
+    res.json({ positions: mine, botFiltered: priced.length - mine.length });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message, positions: [] });
   }
@@ -433,12 +388,20 @@ app.get("/api/bots/:id/activity", async (req, res) => {
     return;
   }
   if (!bot.keyAddress) {
-    res.json({ bot, orders: [], summary: { placed: 0, filled: 0, open: 0, expired: 0, volume: 0 } });
+    res.json({
+      bot, orders: [],
+      summary: { placed: 0, filled: 0, open: 0, expired: 0, volume: 0 },
+      stats: { settled: 0, won: 0, winRate: 0, realised: 0, lost: 0 },
+    });
     return;
   }
 
   try {
-    const orders = await ordersFor(bot.keyAddress, 100);
+    const [orders, priced] = await Promise.all([
+      ordersFor(bot.keyAddress, 100),
+      pricedPositionsFor(bot.keyAddress).catch(() => []),
+    ]);
+    const stats = summarise(priced);
     const summary = orders.reduce(
       (acc, o) => {
         acc.placed += 1;
@@ -450,7 +413,7 @@ app.get("/api/bots/:id/activity", async (req, res) => {
       },
       { placed: 0, filled: 0, open: 0, expired: 0, volume: 0 },
     );
-    res.json({ bot, orders, summary });
+    res.json({ bot, orders, summary, stats });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message, bot, orders: [], summary: null });
   }

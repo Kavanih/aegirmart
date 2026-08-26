@@ -43,6 +43,8 @@ export type Bot = {
   /** Orders placed today, against the daily cap. Rolls on the UTC date. */
   tradesToday: number;
   tradeDay: string;
+  /** Markets this bot has quoted, so the owner's profile can exclude them. */
+  markets?: string[];
 };
 
 /** A bot as the client may see it: the sealed key is replaced by its address. */
@@ -97,13 +99,34 @@ export function openBotKey(id: string): string | null {
   return bot?.key ? openSealed(bot.key) : null;
 }
 
-export function recordBotFill(id: string): void {
+export function recordBotFill(id: string, marketId?: string): void {
   const bot = bots[id];
   if (!bot) return;
   const day = utcDay();
   bot.tradesToday = bot.tradeDay === day ? bot.tradesToday + 1 : 1;
   bot.tradeDay = day;
+
+  // Remembered so the owner's profile can drop what the bot did, which is the
+  // only separation available when a bot signs with the owner's own wallet.
+  if (marketId) {
+    bot.markets = [...new Set([...(bot.markets ?? []), marketId])].slice(-400);
+  }
   persist();
+}
+
+/**
+ * Markets quoted by this owner's bots that sign AS this owner. A bot with its
+ * own key needs no filtering: its positions were never in the profile.
+ */
+export function botMarketsFor(addressRaw: string): Set<string> {
+  const address = addressRaw.toLowerCase();
+  const out = new Set<string>();
+  for (const bot of Object.values(bots)) {
+    if (bot.address !== address) continue;
+    if (bot.key?.address !== address) continue;
+    for (const m of bot.markets ?? []) out.add(m);
+  }
+  return out;
 }
 
 export function planFor(addressRaw: string): Plan {

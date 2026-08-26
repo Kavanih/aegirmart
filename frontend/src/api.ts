@@ -205,11 +205,13 @@ export type Bot = {
 };
 
 export type BotSummary = { placed: number; filled: number; open: number; expired: number; volume: number };
+export type BotStats = { settled: number; won: number; winRate: number; realised: number; lost: number };
 
 export async function fetchBotActivity(address: string, id: string): Promise<{
   bot: Bot;
   orders: OrderRow[];
   summary: BotSummary | null;
+  stats: BotStats | null;
 } | null> {
   const res = await fetch(`/api/bots/${id}/activity?address=${address}`);
   if (!res.ok) return null;

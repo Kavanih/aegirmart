@@ -1044,34 +1044,60 @@ button.logo:hover .wordmark span { color: var(--text); }
 .cycle.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 .cycle-save { font-size: 10px; font-weight: 600; color: var(--accent); }
 
-.tier-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  align-items: start; }
-.tier { display: flex; flex-direction: column; gap: 14px; padding: 28px 24px 30px;
-  min-height: 520px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.tier-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: stretch; padding: 26px 0 14px; }
+.tier { position: relative; display: flex; flex-direction: column; gap: 14px;
+  padding: 28px 24px 30px; min-height: 520px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 16px;
+  transition: transform 180ms cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 180ms ease, border-color 180ms ease; }
 /* Features fall to the bottom, so the cards line up whatever their copy. */
 .tier-features { margin-top: auto; }
-/* The recommended tier reads louder without another colour system. */
-.tier.featured { border-color: var(--accent); box-shadow: var(--shadow); }
+.tier:hover { transform: translateY(-6px); box-shadow: var(--shadow); border-color: var(--hover-line); }
+
+/* The recommended plan sits proud of the row rather than only being outlined,
+   so the eye lands on it before it reads a single price. */
+.tier.featured { transform: translateY(-18px); border-color: var(--accent);
+  box-shadow: 0 18px 44px -14px color-mix(in srgb, var(--accent) 45%, transparent); }
+.tier.featured:hover { transform: translateY(-26px); }
+/* A hairline of accent along the top edge, tucked under the rounded corner. */
+.tier.featured::before { content: ""; position: absolute; inset: -1px -1px auto; height: 4px;
+  border-radius: 16px 16px 0 0;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--surface))); }
 .tier.active { border-color: var(--up-line); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tier { transition: none; }
+  .tier:hover { transform: none; }
+  .tier.featured:hover { transform: translateY(-18px); }
+}
+
+/* Stacked on a narrow screen, a lifted card just reads as misaligned. */
+@media (max-width: 900px) {
+  .tier.featured, .tier.featured:hover, .tier:hover { transform: none; }
+}
 .tier header { display: flex; align-items: center; gap: 9px; }
 .tier header h3 { margin: 0; font-size: 15px; font-weight: 650; }
-.tier-mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px;
-  background: var(--surface-2); color: var(--accent); font-size: 13px; flex-shrink: 0; }
+.tier-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px;
+  background: var(--surface-2); color: var(--accent); font-size: 14px; flex-shrink: 0; }
+.tier.featured .tier-mark { background: var(--accent); color: var(--on-accent); }
 .tier-flag { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px;
-  font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--accent);
-  border: 1px solid var(--accent); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--on-accent); background: var(--accent); border-radius: 999px;
+  padding: 4px 10px; white-space: nowrap; }
+.tier-flag svg { font-size: 8px; }
 
 .tier-tagline { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.6; min-height: 3.2em; }
 .tier-price { margin: 6px 0 2px; display: flex; align-items: baseline; gap: 7px; }
-.tier-amount { font-size: 34px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.tier-amount { font-size: 40px; font-weight: 700; letter-spacing: -0.035em; line-height: 1;
+  font-variant-numeric: tabular-nums; }
 .tier-cycle { font-size: 12px; color: var(--muted); }
 .tier-save { margin: 0; font-size: 11px; color: var(--accent); }
 
 .tier-cta { padding: 13px 0; border-radius: 10px; cursor: pointer; font-size: 13.5px; font-weight: 650;
   background: var(--surface-2); border: 1px solid var(--line); color: var(--text); font-family: inherit; }
 .tier-cta:hover:not(:disabled) { border-color: var(--hover-line); }
-.tier-cta.cta { background: var(--accent); color: var(--on-accent); border-color: transparent;
-  justify-content: center; }
+.tier-cta.cta { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.tier-cta.cta:hover:not(:disabled) { filter: brightness(1.08); }
 .tier-cta.current { color: var(--muted); cursor: default; }
 .tier-cta:disabled { cursor: default; }
 
