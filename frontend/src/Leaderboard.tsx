@@ -65,17 +65,27 @@ export function Leaderboard() {
 
   if (failed) return frame(<EmptyState title="Leaderboard unavailable" hint="The indexer did not respond." />);
 
-  if (!traders) return frame(<TableSkeleton columns={["Trader", "Settled", "Wins", "Win rate", "Size"]} rows={6} />);
+  if (!traders) return frame(<TableSkeleton columns={["Trader", "Settled", "Wins", "Win rate", "Recent volume"]} rows={6} />);
   if (traders.length === 0) {
     return frame(<EmptyState title="No settled positions yet" hint="Rankings appear once windows close." />);
   }
+
+  const footnote = (
+    <p className="footnote">
+      Ranked by win rate once a trader has five settled calls, by recent volume below that. A market held on both legs
+      at once is a minted set rather than a call, so it counts toward volume but not toward the record. Recent volume
+      covers the last thousand fills on the venue, so an older trader can show none.
+    </p>
+  );
 
   return (
     <div className="page">
       <div className="page-head">
         <h2>Leaderboard</h2>
-        <p>Ranked by wins across settled windows</p>
+        <p>Ranked by win rate over settled calls</p>
       </div>
+
+      <VenueBanner venue={venue} />
 
       <TableScroll label="Leaderboard">
       <table className="table">
@@ -86,7 +96,7 @@ export function Leaderboard() {
             <th className="num">Settled</th>
             <th className="num">Wins</th>
             <th className="num">Win rate</th>
-            <th className="num">Size</th>
+            <th className="num">Recent volume</th>
           </tr>
         </thead>
         <tbody>
@@ -104,7 +114,9 @@ export function Leaderboard() {
                 <td className={`num ${trader.winRate >= 0.5 ? "rate-good" : "rate-bad"}`}>
                   {Math.round(trader.winRate * 100)}%
                 </td>
-                <td className="num">{trader.volume.toFixed(0)}</td>
+                <td className={`num ${trader.volume === 0 ? "muted-cell" : ""}`}>
+                  {trader.volume === 0 ? "--" : trader.volume.toFixed(0)}
+                </td>
               </tr>
             );
           })}

@@ -567,31 +567,78 @@ export type TraderRow = { account: string; settled: number; wins: number; winRat
 export async function leaderboard(limit: number): Promise<TraderRow[]> {
   const body = JSON.stringify({
     query: `query Board($limit: Int!) {
-      OutcomeBalance(limit: $limit, where: {market: {finalized: {_eq: true}}}, order_by: {balance: desc}) {
+      OutcomeBalance(
+        limit: $limit
+        where: {market: {finalized: {_eq: true}}}
+        order_by: {market: {expiry: desc}}
+      ) {
         ${POSITION_FIELDS}
       }
     }`,
     variables: { limit },
   });
 
-  const data = await query<{ OutcomeBalance: Record<string, any>[] }>(body);
-  const byAccount = new Map<string, TraderRow>();
+  // Volume has to come from fills. A settled leg's balance is what is LEFT,
+  // and a redeemed winner has none, so summing balances reported zero for
+  // exactly the traders who did best.
+  const [data, fills] = await Promise.all([
+    query<{ OutcomeBalance: Record<string, any>[] }>(body),
+    venueFills(1000).catch((): VenueFill[] => []),
+  ]);
 
+  const tradedBy = new Map<string, number>();
+  for (const fill of fills) {
+    for (const account of fill.accounts) {
+      const key = account.toLowerCase();
+      tradedBy.set(key, (tradedBy.get(key) ?? 0) + fill.size);
+    }
+  }
+
+  // Group by account AND market first. An account holding both legs of a
+  // market minted a set: one leg wins by construction, so counting them
+  // separately gave every maker exactly one win in two and a 50% rate.
+  const byAccountMarket = new Map<string, { account: string; legs: Position[] }>();
   for (const row of data.OutcomeBalance) {
     const p = toPosition(row);
     if (p.winningOutcome === null) continue;
+    const account = String(row.account).toLowerCase();
+    const key = `${account}:${p.marketId}`;
+    const entry = byAccountMarket.get(key) ?? { account, legs: [] };
+    entry.legs.push(p);
+    byAccountMarket.set(key, entry);
+  }
 
-    const account = String(row.account);
+  const byAccount = new Map<string, TraderRow>();
+  for (const { account, legs } of byAccountMarket.values()) {
     const entry = byAccount.get(account) ?? { account, settled: 0, wins: 0, winRate: 0, volume: 0 };
-    entry.settled += 1;
-    entry.volume += p.size;
-    if (p.outcomeIndex === p.winningOutcome) entry.wins += 1;
+
+    // Both legs held is a wash, so it is not a call anyone can be judged on.
+    const hedged = legs.length > 1 && new Set(legs.map((l) => l.outcomeIndex)).size > 1;
+    if (!hedged) {
+      for (const leg of legs) {
+        entry.settled += 1;
+        if (leg.outcomeIndex === leg.winningOutcome) entry.wins += 1;
+      }
+    }
+
     byAccount.set(account, entry);
   }
 
   return [...byAccount.values()]
-    .map((r) => ({ ...r, winRate: r.settled ? r.wins / r.settled : 0 }))
-    .sort((a, b) => b.wins - a.wins || b.volume - a.volume)
+    .map((r) => ({
+      ...r,
+      winRate: r.settled ? r.wins / r.settled : 0,
+      volume: tradedBy.get(r.account) ?? 0,
+    }))
+    // Rank on the record where there is one, and never let a single lucky
+    // call outrank a long one: below the threshold, order by volume traded.
+    .sort((a, b) => {
+      const aRanked = a.settled >= 5;
+      const bRanked = b.settled >= 5;
+      if (aRanked !== bRanked) return aRanked ? -1 : 1;
+      if (aRanked && bRanked) return b.winRate - a.winRate || b.settled - a.settled;
+      return b.volume - a.volume;
+    })
     .slice(0, 50);
 }
 
