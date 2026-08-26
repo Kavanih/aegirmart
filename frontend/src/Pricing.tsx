@@ -157,10 +157,6 @@ export function Pricing() {
         </p>
       )}
 
-      <p className="footnote">
-        Paid in {TUSDC.symbol} on Somnia testnet, signed in your own wallet. The plan is granted by reading that
-        transaction on chain, so a payment can only be redeemed once and only by the account that made it.
-      </p>
     </div>
   );
 }
