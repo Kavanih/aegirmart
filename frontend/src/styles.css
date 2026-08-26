@@ -857,10 +857,11 @@ button.logo:hover .wordmark span { color: var(--text); }
 .key-line.spot { color: var(--up); }
 
 .outcomes h3, .detail-read h3, .detail-prints h3 { font-size: 13px; margin: 0 0 10px; font-weight: 650; }
-.outcome-row { display: flex; align-items: center; gap: 16px; padding: 12px 14px; margin-bottom: 8px;
+.outcome-row { display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin-bottom: 8px;
+  flex-wrap: wrap;
   border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }
-.outcome-figure { display: flex; flex-direction: column; gap: 2px; font-size: 17px; font-weight: 650;
-  font-variant-numeric: tabular-nums; min-width: 86px; }
+.outcome-figure { display: flex; flex-direction: column; gap: 2px; font-size: 16px; font-weight: 650;
+  font-variant-numeric: tabular-nums; min-width: 80px; }
 .outcome-sub { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--muted); }
 .outcome-row .mini { margin-left: auto; padding: 8px 18px; }
@@ -1131,3 +1132,32 @@ button.logo:hover .wordmark span { color: var(--text); }
 
 .page-head .detail-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .page-head .detail-title h2 { margin: 0; }
+
+
+/* ---- Venue totals ---- */
+/* Counters that only ever climb, so the row reads as the venue's life to date
+   rather than whatever one page of indexer results happened to hold. */
+.venue-banner { display: grid; gap: 14px; margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.venue-cell { display: flex; align-items: center; gap: 13px; padding: 16px 18px;
+  border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
+.venue-icon { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0;
+  border-radius: 11px; background: var(--surface-2); color: var(--accent); font-size: 15px; }
+.venue-cell > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.venue-value { font-size: 19px; font-weight: 680; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+.venue-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+
+/* ---- Strategy record ---- */
+.strategy-grid { display: grid; gap: 12px; margin-bottom: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.strategy-card { display: flex; flex-direction: column; gap: 10px; padding: 16px 17px;
+  border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
+.strategy-card header { display: flex; align-items: center; gap: 10px; }
+.strategy-card h4 { margin: 0; font-size: 13.5px; font-weight: 650; }
+.strategy-rate { font-size: 26px; font-weight: 700; letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums; }
+.strategy-rate.good { color: var(--up); }
+.strategy-rate.bad { color: var(--down); }
+.strategy-rate.none { color: var(--muted); font-size: 15px; font-weight: 600; }
+.strategy-meta { font-size: 11px; color: var(--muted); }

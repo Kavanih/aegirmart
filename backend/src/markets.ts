@@ -287,6 +287,27 @@ export async function positionsFor(address: string, limit: number): Promise<Posi
   return data.OutcomeBalance.map(toPosition).filter((p) => p.marketId);
 }
 
+export type VenueFill = { id: string; size: number; accounts: string[] };
+
+/** Recent fills across the venue, for the running totals. */
+export async function venueFills(limit = 200): Promise<VenueFill[]> {
+  const body = JSON.stringify({
+    query: `query Fills($venue: String!, $limit: Int!) {
+      Fill(limit: $limit, order_by: {timestamp: desc}, where: {market: {venueId: {_eq: $venue}}}) {
+        id quantity maker taker
+      }
+    }`,
+    variables: { venue: VENUE_ID, limit },
+  });
+
+  const data = await query<{ Fill: Record<string, any>[] }>(body);
+  return data.Fill.map((f) => ({
+    id: String(f.id),
+    size: Number(f.quantity) / COLLATERAL_SCALE,
+    accounts: [f.maker, f.taker].filter(Boolean).map(String),
+  })).filter((f) => Number.isFinite(f.size) && f.size > 0);
+}
+
 export type Redemption = { marketId: string; outcomeIndex: number; burned: number; collateralOut: number };
 
 /**

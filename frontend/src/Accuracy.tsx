@@ -3,6 +3,14 @@ import { fetchAccuracy, fetchHealth, money, windowLabel, type Health, type Model
 import { fmt } from "./payout";
 import { TableScroll, TableSkeleton, EmptyState } from "./Table";
 import { AssetMark } from "./AssetMark";
+import { FaBrain, FaCalculator, FaRobot } from "react-icons/fa";
+import { fetchStats, type StrategyRow } from "./api";
+
+const STRATEGY_META = {
+  standard: { name: "Market maker", icon: <FaRobot /> },
+  quant: { name: "Quant", icon: <FaCalculator /> },
+  ai: { name: "AI", icon: <FaBrain /> },
+} as const;
 
 function shortModel(id: string): string {
   return id.replace(/:free$/, "").split("/").pop() ?? id;
@@ -19,11 +27,13 @@ export function Accuracy() {
   const [data, setData] = useState<{ records: PredictionRecord[]; models: ModelScore[]; latency: ModelLatency[] } | null>(null);
   const [failed, setFailed] = useState(false);
   const [health, setHealth] = useState<Health | null>(null);
+  const [strategies, setStrategies] = useState<StrategyRow[] | null>(null);
 
   useEffect(() => {
     let alive = true;
     const load = () => {
       fetchHealth().then((h) => alive && setHealth(h)).catch(() => undefined);
+      fetchStats().then((d) => alive && d && setStrategies(d.strategies)).catch(() => undefined);
       return fetchAccuracy().then((d) => alive && setData(d)).catch(() => alive && setFailed(true));
     };
     load();
@@ -85,6 +95,39 @@ export function Accuracy() {
           />
         )}
       </div>
+
+      <h3 className="section-head">Strategy record</h3>
+      <div className="strategy-grid">
+        {(strategies ?? []).map((row) => {
+          const meta = STRATEGY_META[row.kind];
+          // A market maker holds both legs on purpose, so "was it right" is
+          // not a question about it. Report the count, not a hollow rate.
+          const rateless = row.kind === "standard";
+          return (
+            <article key={row.kind} className="strategy-card">
+              <header>
+                <span className={`bot-mark ${row.kind}`}>{meta.icon}</span>
+                <h4>{meta.name}</h4>
+              </header>
+              {rateless ? (
+                <span className="strategy-rate none">No direction taken</span>
+              ) : (
+                <span className={`strategy-rate ${row.settled === 0 ? "none" : row.winRate >= 0.5 ? "good" : "bad"}`}>
+                  {row.settled === 0 ? "Not settled yet" : `${Math.round(row.winRate * 100)}%`}
+                </span>
+              )}
+              <span className="strategy-meta">
+                {row.trades} trade{row.trades === 1 ? "" : "s"}
+                {!rateless && row.settled > 0 && ` · ${row.won} of ${row.settled} settled correct`}
+              </span>
+            </article>
+          );
+        })}
+      </div>
+      <p className="footnote">
+        Counted per strategy rather than per wallet, because several bots can share one signing key and look like a
+        single trader on chain. A market maker quotes both sides deliberately, so it has no direction to be right about.
+      </p>
 
       {data.models.length > 0 && (
         <>

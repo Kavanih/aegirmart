@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import {
-  cents, countdown, fetchMarketDetail, money, stamp, title, windowLabel, windowRange,
-  type MarketDetail as Detail,
+  countdown, fetchBooks, fetchMarketDetail, money, stamp, title, windowLabel, windowRange,
+  type MarketBook, type MarketDetail as Detail,
 } from "./api";
 import { AssetMark } from "./AssetMark";
 import { Sparkline } from "./Sparkline";
@@ -27,8 +27,25 @@ export function MarketDetail({ marketId, onBack }: Props) {
   const [side, setSide] = useState<"up" | "down">("up");
   const [stake, setStake] = useState(5);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+  const [book, setBook] = useState<MarketBook | null>(null);
 
   const { isConnected } = useAccount();
+
+  // The resting book, for what a leg actually costs rather than what it last
+  // traded at. Polled with the page.
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      fetchBooks()
+        .then((all) => alive && setBook(all.find((b) => b.marketId === marketId) ?? null))
+        .catch(() => undefined);
+    load();
+    const poll = window.setInterval(load, 8_000);
+    return () => {
+      alive = false;
+      window.clearInterval(poll);
+    };
+  }, [marketId]);
   const { place } = useTrade();
   const toast = useToast();
 
@@ -71,6 +88,8 @@ export function MarketDetail({ marketId, onBack }: Props) {
   const upMarket = legPrice(market.lastPrice, "up");
   const downMarket = legPrice(market.lastPrice, "down");
   const modelUp = read ? read.probability : null;
+  const bestBidUp = book?.bids[0]?.price ?? null;
+  const bestAskUp = book?.asks[0]?.price ?? null;
 
   const onBuy = () => {
     if (!isConnected) return toast.push("error", "Connect a wallet first");
@@ -138,6 +157,9 @@ export function MarketDetail({ marketId, onBack }: Props) {
           {(["up", "down"] as const).map((leg) => {
             const marketPrice = leg === "up" ? upMarket : downMarket;
             const model = modelUp === null ? null : leg === "up" ? modelUp : 1 - modelUp;
+            // The last print is history. What a buyer pays is the best offer
+            // resting on that leg right now.
+            const ask = leg === "up" ? bestAskUp : bestBidUp === null ? null : 1 - bestBidUp;
             return (
               <div key={leg} className={`outcome-row ${leg}`}>
                 <span className={`pos-side ${leg}`}>{leg.toUpperCase()}</span>
@@ -146,8 +168,16 @@ export function MarketDetail({ marketId, onBack }: Props) {
                   <span className="outcome-sub">model</span>
                 </span>
                 <span className="outcome-figure">
-                  {marketPrice === null ? <em className="read-idle">no book</em> : cents(marketPrice)}
+                  {marketPrice === null ? <em className="read-idle">no book</em> : `${Math.round(marketPrice * 100)}c`}
                   <span className="outcome-sub">market</span>
+                </span>
+                <span className="outcome-figure">
+                  {ask === null ? <em className="read-idle">nothing offered</em> : `${Math.round(ask * 100)}c`}
+                  <span className="outcome-sub">to buy</span>
+                </span>
+                <span className="outcome-figure">
+                  {ask === null ? <em className="read-idle">--</em> : `${(1 / ask).toFixed(2)}x`}
+                  <span className="outcome-sub">payout</span>
                 </span>
                 <button
                   className={`mini ${leg}`}
@@ -155,7 +185,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
                   onClick={() => setSide(leg)}
                   title={live ? `Take the ${leg} side` : "This window has closed"}
                 >
-                  Take {leg === "up" ? "Up" : "Down"}
+                  Buy {leg === "up" ? "Up" : "Down"} {ask !== null && `${Math.round(ask * 100)}c`}
                 </button>
               </div>
             );
@@ -196,7 +226,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
                 {[...trades].reverse().map((t, i) => (
                   <tr key={`${t.t}-${i}`}>
                     <td className="muted-cell">{stamp(t.t)}</td>
-                    <td className="num">{cents(t.price)}</td>
+                    <td className="num">{Math.round(t.price * 100)}c</td>
                     <td className="num">{t.size.toFixed(2)}</td>
                     <td className="num muted-cell">{t.takerSide.replace("_", " ")}</td>
                   </tr>
@@ -215,7 +245,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
 
         <div className="ticket-sides">
           {(["up", "down"] as const).map((leg) => {
-            const price = leg === "up" ? upMarket : downMarket;
+            const price = leg === "up" ? bestAskUp : bestBidUp === null ? null : 1 - bestBidUp;
             return (
               <button
                 key={leg}
@@ -223,7 +253,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
                 onClick={() => setSide(leg)}
                 aria-pressed={side === leg}
               >
-                {leg === "up" ? "Up" : "Down"} {price === null ? "--" : cents(price)}
+                {leg === "up" ? "Up" : "Down"} {price === null ? "--" : `${Math.round(price * 100)}c`}
               </button>
             );
           })}

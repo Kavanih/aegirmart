@@ -1,8 +1,8 @@
 import "dotenv/config";
 import express from "express";
-import { liveMarkets, strikeSeries, positionsFor, leaderboard, settledMarkets, ordersFor, marketById, tradesFor, liveBooks, redemptionsFor } from "./markets.js";
+import { liveMarkets, strikeSeries, positionsFor, leaderboard, settledMarkets, ordersFor, marketById, tradesFor, liveBooks, redemptionsFor, venueFills } from "./markets.js";
 import { costBasisFor, type BasisIndex } from "./fills.js";
-import { startTracker, allRecords, modelScores, cachedPrediction, cachedPredictions } from "./tracker.js";
+import { startTracker, allRecords, modelScores, cachedPrediction, cachedPredictions, recordRead } from "./tracker.js";
 import { allStats } from "./modelStats.js";
 import { buildEvidence } from "./quant.js";
 import { predict, quotaBlockedFor, freeModels } from "./openrouter.js";
@@ -12,6 +12,7 @@ import { keyStorageReady } from "./keys.js";
 import { pricedPositionsFor, summarise } from "./positions.js";
 import { TIERS, TREASURY, COLLATERAL, redeem, subscriptionFor, priceOf, tierSpec, type Tier, type Cycle } from "./plans.js";
 import { startRunner } from "./runner.js";
+import { observeFills, venueStats, strategyTable, scoreBotTrades } from "./stats.js";
 import { claimLiveSpend, budgetStatus } from "./budget.js";
 import type { PredictionResult } from "./openrouter.js";
 
@@ -116,6 +117,23 @@ app.post("/api/prediction", async (req, res) => {
 
     // A narrative holds until expiry, but a failure must not: retry in seconds.
     if (result.status !== "ok") narratives.set(market.marketId, result, 5_000);
+
+    // A hand requested read costs the same allowance as one the tracker makes,
+    // so it goes in the record too: it counts on the scoreboard, a bot can act
+    // on it, and nobody pays twice for the same answer.
+    if (result.status === "ok") {
+      recordRead(
+        {
+          marketId: String(market.marketId),
+          asset: String(market.asset),
+          intervalSec: Number(market.intervalSec ?? 0),
+          strike: Number(market.strike ?? 0),
+          expiry: Number(market.expiry ?? 0),
+        },
+        result.prediction,
+        result.model,
+      );
+    }
 
     res.json({
       ...result,
@@ -267,6 +285,11 @@ function requireAddress(raw: unknown, res: express.Response): string | null {
   }
   return address;
 }
+
+/** Venue totals and the record of each strategy, for the leaderboard. */
+app.get("/api/stats", (_req, res) => {
+  res.json({ venue: venueStats(), strategies: strategyTable() });
+});
 
 /** The pricing table, and where a payment has to go. */
 app.get("/api/plans", (req, res) => {
@@ -467,4 +490,12 @@ app.listen(PORT, () => {
     startTracker(API_KEY);
   }
   startRunner();
+
+  // Fold new fills into the running totals, and settle up the strategy record.
+  const sweep = () => {
+    venueFills(200).then(observeFills).catch(() => undefined);
+    scoreBotTrades().catch(() => undefined);
+  };
+  sweep();
+  setInterval(sweep, 30_000);
 });

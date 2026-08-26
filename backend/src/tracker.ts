@@ -123,6 +123,40 @@ export function cachedPredictions(ids: string[]): PredictionRecord[] {
   return records.filter((r) => wanted.has(r.marketId));
 }
 
+/**
+ * Store a read against a market.
+ *
+ * Used by the tracker and by a read someone asked for by hand: both cost the
+ * same allowance, so both belong in the record and both should be reusable
+ * rather than answered twice.
+ */
+export function recordRead(
+  market: { marketId: string; asset: string; intervalSec: number; strike: number; expiry: number },
+  prediction: { probability: number; confidence: "low" | "medium" | "high"; reasoning: string },
+  model: string,
+): void {
+  if (records.some((r) => r.marketId === market.marketId)) return;
+
+  records.unshift({
+    marketId: market.marketId,
+    asset: market.asset,
+    intervalSec: market.intervalSec,
+    strike: market.strike,
+    expiry: market.expiry,
+    probability: prediction.probability,
+    side: prediction.probability >= 0.5 ? "up" : "down",
+    confidence: prediction.confidence,
+    reasoning: prediction.reasoning,
+    model,
+    predictedAt: Math.floor(Date.now() / 1000),
+    outcome: null,
+    correct: null,
+  });
+
+  if (records.length > MAX_RECORDS) records = records.slice(0, MAX_RECORDS);
+  persist();
+}
+
 async function predictMarket(market: Market, apiKey: string): Promise<void> {
   const evidence = await buildEvidence(market);
   // Leave a third of the window for the card to actually show the read.

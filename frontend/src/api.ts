@@ -131,6 +131,15 @@ export type Position = {
   pnl: number | null;
 };
 
+export type VenueStats = { volume: number; trades: number; traders: number };
+export type StrategyRow = { kind: BotKind; trades: number; settled: number; won: number; winRate: number };
+
+export async function fetchStats(): Promise<{ venue: VenueStats; strategies: StrategyRow[] } | null> {
+  const res = await fetch("/api/stats");
+  if (!res.ok) return null;
+  return await res.json();
+}
+
 export type Tier = "free" | "starter" | "pro";
 export type Cycle = "monthly" | "yearly";
 
