@@ -8,6 +8,7 @@ import { AssetMark } from "./AssetMark";
 import { Sparkline } from "./Sparkline";
 import { StakePanel } from "./StakePanel";
 import { useTrade } from "./wallet/useTrade";
+import { quoteFor } from "./wallet/trade";
 import { useToast } from "./Toast";
 import { EmptyState } from "./Table";
 
@@ -111,7 +112,10 @@ export function MarketDetail({ marketId, onBack }: Props) {
         : bestAskUp !== null
           ? 1 - bestAskUp
           : null;
-  const shares = ticketPrice && ticketPrice > 0 ? stake / ticketPrice : null;
+  // Read from the same helper the order uses, so the preview cannot promise a
+  // size or an escrow the placement will not honour.
+  const quote = ticketPrice && ticketPrice > 0 && stake > 0 ? quoteFor(stake, ticketPrice) : null;
+  const shares = quote?.shares ?? null;
   // An order fills now only when something is already offered at or under it.
   const legAsk = side === "up" ? bestAskUp : bestBidUp === null ? null : 1 - bestBidUp;
   const fillsNow = ticketPrice !== null && legAsk !== null && ticketPrice >= legAsk;
@@ -380,11 +384,20 @@ export function MarketDetail({ marketId, onBack }: Props) {
         <dl className="ticket-preview">
           <div>
             <dt>Price</dt>
-            <dd>{ticketPrice === null ? "--" : `${Math.round(ticketPrice * 100)}c`}</dd>
+            <dd>{quote === null ? "--" : `${Math.round(quote.price * 100)}c`}</dd>
           </div>
           <div>
             <dt>Shares</dt>
             <dd>{shares === null ? "--" : shares.toFixed(2)}</dd>
+          </div>
+          <div className="ticket-preview-wide">
+            <dt>You commit</dt>
+            <dd className="commit">
+              {quote === null ? "--" : `${quote.escrow.toFixed(2)} tUSDC`}
+              {quote !== null && Math.abs(quote.escrow - stake) >= 0.01 && (
+                <span className="commit-note"> of the {stake.toFixed(2)} entered, after rounding to a whole lot</span>
+              )}
+            </dd>
           </div>
           <div>
             <dt>Pays if right</dt>

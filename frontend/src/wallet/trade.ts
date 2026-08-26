@@ -81,6 +81,27 @@ export function planOrder(market: Market, direction: Direction, stake: number, l
   };
 }
 
+/**
+ * What an order at this price and stake actually becomes.
+ *
+ * Quantity snaps down to a whole lot and the price to a tick, so the escrow
+ * taken is rarely the stake typed in. The ticket and planOrder both read this,
+ * so the figure previewed is the figure committed.
+ */
+export function quoteFor(stake: number, limitPrice: number): { shares: number; escrow: number; price: number } | null {
+  const ownPrice = snap(limitPrice, TICK, "round");
+  if (ownPrice <= 0n || ownPrice >= ONE) return null;
+
+  const quantity = snap(stake / limitPrice, LOT, "floor");
+  if (quantity <= 0n) return null;
+
+  return {
+    shares: Number(quantity) / Number(ONE),
+    escrow: Number((ownPrice * quantity) / ONE) / Number(ONE),
+    price: Number(ownPrice) / Number(ONE),
+  };
+}
+
 export function orderArgs(plan: OrderPlan) {
   return [
     plan.kind,
