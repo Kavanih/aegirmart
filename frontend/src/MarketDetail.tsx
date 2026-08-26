@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import {
-  countdown, fetchBooks, fetchMarketDetail, money, stamp, title, windowLabel, windowRange,
+  countdown, fetchBooks, fetchMarketDetail, money, shortAddress, stamp, title, windowLabel, windowRange,
   type MarketBook, type MarketDetail as Detail,
 } from "./api";
 import { AssetMark } from "./AssetMark";
@@ -165,7 +165,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
           {/* The underlying against the strike, because that is what decides
               this contract. The book is too thin to draw a price history from. */}
           {path.length >= 2 ? (
-            <Sparkline points={path} target={market.strike} height={190} />
+            <Sparkline points={path} target={market.strike} height={266} />
           ) : (
             <p className="read-idle">
               The price path for this window is no longer retained. Only the last hour of strikes is kept.
@@ -238,7 +238,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
         )}
 
         <section className="detail-prints">
-          <h3>Prints</h3>
+          <h3>Trades</h3>
           {trades.length === 0 ? (
             <p className="read-idle">Nothing has traded on this contract yet.</p>
           ) : (
@@ -246,18 +246,28 @@ export function MarketDetail({ marketId, onBack }: Props) {
               <thead>
                 <tr>
                   <th>Time</th>
-                  <th className="num">YES price</th>
+                  <th>Side</th>
+                  <th className="num">Price</th>
                   <th className="num">Size</th>
-                  <th className="num">Taker</th>
+                  <th className="num">Value</th>
+                  <th>Buyer</th>
+                  <th>Seller</th>
                 </tr>
               </thead>
               <tbody>
                 {[...trades].reverse().map((t, i) => (
                   <tr key={`${t.t}-${i}`}>
                     <td className="muted-cell">{stamp(t.t)}</td>
+                    <td>
+                      <span className={`pos-side ${t.takerSide.includes("NO") ? "down" : "up"}`}>
+                        {t.takerSide.replace("_", " ")}
+                      </span>
+                    </td>
                     <td className="num">{Math.round(t.price * 100)}c</td>
                     <td className="num">{t.size.toFixed(2)}</td>
-                    <td className="num muted-cell">{t.takerSide.replace("_", " ")}</td>
+                    <td className="num muted-cell">{(t.size * t.price).toFixed(2)}</td>
+                    <td className="addr-cell">{t.buyer ? shortAddress(t.buyer) : "--"}</td>
+                    <td className="addr-cell">{t.seller ? shortAddress(t.seller) : "--"}</td>
                   </tr>
                 ))}
               </tbody>

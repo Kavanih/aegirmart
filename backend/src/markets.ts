@@ -421,7 +421,15 @@ export async function liveBooks(): Promise<MarketBook[]> {
   return [...byMarket.values()].sort((a, b) => a.expiry - b.expiry);
 }
 
-export type MarketTrade = { t: number; price: number; size: number; takerSide: string };
+export type MarketTrade = {
+  t: number;
+  price: number;
+  size: number;
+  takerSide: string;
+  /** Who bought the leg the taker was after, and who supplied it. */
+  buyer: string;
+  seller: string;
+};
 
 /** One market by id, including dead ones, so a detail page can render history. */
 export async function marketById(marketId: string): Promise<Market | null> {
@@ -455,7 +463,7 @@ export async function tradesFor(marketId: string, limit: number): Promise<Market
   const body = JSON.stringify({
     query: `query Trades($id: String!, $limit: Int!) {
       Fill(limit: $limit, order_by: {timestamp: desc}, where: {market: {marketId: {_eq: $id}}}) {
-        timestamp quantity quoteQuantity takerSide
+        timestamp quantity quoteQuantity takerSide maker taker
       }
     }`,
     variables: { id: marketId, limit },
@@ -466,7 +474,18 @@ export async function tradesFor(marketId: string, limit: number): Promise<Market
     .map((f) => {
       const size = Number(f.quantity) / COLLATERAL_SCALE;
       const quote = Number(f.quoteQuantity) / COLLATERAL_SCALE;
-      return { t: Number(f.timestamp), price: size > 0 ? quote / size : 0, size, takerSide: String(f.takerSide ?? "") };
+      const takerSide = String(f.takerSide ?? "");
+      // The taker names the direction. Whoever took a BUY was the buyer of
+      // that leg, and the maker supplied it; a SELL taker is the other way up.
+      const takerBought = takerSide.startsWith("BUY");
+      return {
+        t: Number(f.timestamp),
+        price: size > 0 ? quote / size : 0,
+        size,
+        takerSide,
+        buyer: String((takerBought ? f.taker : f.maker) ?? ""),
+        seller: String((takerBought ? f.maker : f.taker) ?? ""),
+      };
     })
     .filter((f) => f.size > 0 && f.price > 0 && f.price < 1)
     .reverse();

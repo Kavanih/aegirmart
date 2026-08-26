@@ -1178,3 +1178,5 @@ button.logo:hover .wordmark span { color: var(--text); }
 .ticket-preview dd { margin: 0; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ticket-preview dd.pays { color: var(--up); }
+
+.addr-cell { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }

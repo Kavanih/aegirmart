@@ -304,7 +304,14 @@ export async function fetchBooks(): Promise<MarketBook[]> {
   return ((await res.json()) as { books: MarketBook[] }).books;
 }
 
-export type MarketTrade = { t: number; price: number; size: number; takerSide: string };
+export type MarketTrade = {
+  t: number;
+  price: number;
+  size: number;
+  takerSide: string;
+  buyer: string;
+  seller: string;
+};
 
 export type MarketRead = {
   probability: number;
