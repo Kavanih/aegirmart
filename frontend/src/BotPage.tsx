@@ -1,154 +1,201 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
-import { cents, countdown, fetchBooks, money, windowLabel, type MarketBook } from "./api";
-import { AssetMark } from "./AssetMark";
-import { TableScroll, EmptyState } from "./Table";
+import {
+  FaBrain, FaChartLine, FaCoins, FaCrown, FaKey, FaPause, FaPen, FaPlay, FaPlus, FaRobot, FaSlidersH, FaTrash,
+} from "react-icons/fa";
+import { fetchBooks, fetchBots, removeBot, saveBot, type Bot, type BotLimits, type MarketBook, type Plan } from "./api";
+import { BotForm } from "./BotForm";
+import { EmptyState } from "./Table";
 
-/** Best bid, best ask and the gap, or nulls where that side is empty. */
-function top(book: MarketBook) {
-  const bid = book.bids[0]?.price ?? null;
-  const ask = book.asks[0]?.price ?? null;
-  return { bid, ask, spread: bid !== null && ask !== null ? ask - bid : null };
+function shortModel(id: string | null): string {
+  if (!id) return "best available";
+  return id.replace(/:free$/, "").split("/").pop() ?? id;
 }
 
 export function BotPage() {
-  const [books, setBooks] = useState<MarketBook[] | null>(null);
-  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const { address } = useAccount();
-  const mine = address?.toLowerCase() ?? null;
+  const [bots, setBots] = useState<Bot[] | null>(null);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [limits, setLimits] = useState<BotLimits | null>(null);
+  const [books, setBooks] = useState<MarketBook[]>([]);
+  const [editing, setEditing] = useState<Bot | null>(null);
+  const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    const tick = window.setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
-    return () => window.clearInterval(tick);
-  }, []);
+  const load = useCallback(() => {
+    if (!address) return;
+    fetchBots(address).then((d) => {
+      if (!d) return;
+      setBots(d.bots);
+      setPlan(d.plan);
+      setLimits(d.limits);
+    });
+  }, [address]);
+
+  useEffect(load, [load]);
 
   useEffect(() => {
     let alive = true;
-    const load = () => fetchBooks().then((b) => alive && setBooks(b));
-    load();
-    const poll = window.setInterval(load, 5_000);
+    const poll = () => fetchBooks().then((b) => alive && setBooks(b));
+    poll();
+    const id = window.setInterval(poll, 8_000);
     return () => {
       alive = false;
-      window.clearInterval(poll);
+      window.clearInterval(id);
     };
   }, []);
 
-  const stats = useMemo(() => {
-    const rows = books ?? [];
-    const twoSided = rows.filter((b) => b.bids.length > 0 && b.asks.length > 0);
-    const spreads = twoSided.map((b) => top(b).spread!).filter((n) => Number.isFinite(n));
-    // "Mine" is only meaningful once a wallet is connected; the bot quotes from
-    // the same account, so its resting orders are the ones owned by it.
-    const ours = mine
-      ? rows.reduce((n, b) => n + [...b.bids, ...b.asks].filter((l) => l.owner === mine).length, 0)
-      : null;
+  const quoted = useMemo(() => books.filter((b) => b.bids.length && b.asks.length).length, [books]);
 
-    return {
-      live: rows.length,
-      twoSided: twoSided.length,
-      ours,
-      avgSpread: spreads.length ? spreads.reduce((a, b) => a + b, 0) / spreads.length : null,
-    };
-  }, [books, mine]);
+  const toggle = async (bot: Bot) => {
+    if (!address) return;
+    await saveBot(address, { status: bot.status === "running" ? "paused" : "running" }, bot.id);
+    load();
+  };
 
-  const quoting = stats.twoSided > 0;
+  const drop = async (bot: Bot) => {
+    if (!address) return;
+    await removeBot(address, bot.id);
+    load();
+  };
+
+  if (!address) {
+    return <EmptyState title="Connect a wallet" hint="Bots are stored against the account that owns them." />;
+  }
+
+  const isPro = plan?.plan === "pro";
+  const atLimit = Boolean(bots && limits && bots.length >= limits.maxBots);
 
   return (
     <div className="page">
       <div className="page-head">
         <div>
-          <h2>Maker bot</h2>
+          <h2>Bots</h2>
           <p>
-            Resting quotes on the live book. Cards read <code>--</code> until something is quoting, so this is where to
-            check before recording anything.
+            Quoting strategies you own. {books.length > 0 && `${quoted}/${books.length} live contracts are quoted right now.`}
           </p>
         </div>
-        <span className={quoting ? "bot-pill on" : "bot-pill"}>
-          <span className="bot-dot" aria-hidden="true" />
-          {books === null ? "Checking" : quoting ? "Book is quoted" : "Book is empty"}
-        </span>
+
+        <div className="bot-head-actions">
+          <span className={isPro ? "plan-pill pro" : "plan-pill"}>
+            {isPro ? <><FaCrown /> Pro</> : "Free plan"}
+          </span>
+          <button
+            className="cta"
+            disabled={atLimit}
+            title={atLimit && limits ? `A wallet can hold ${limits.maxBots} bots for now` : "Create a bot"}
+            onClick={() => {
+              setEditing(null);
+              setOpen(true);
+            }}
+          >
+            <FaPlus /> New bot
+          </button>
+        </div>
       </div>
 
-      <div className="stat-grid">
-        <StatCard label="Live markets" value={books === null ? "--" : String(stats.live)} />
-        <StatCard
-          label="Two sided"
-          value={books === null ? "--" : `${stats.twoSided}/${stats.live}`}
-          tone={books === null ? undefined : stats.twoSided === stats.live && stats.live > 0 ? "good" : "bad"}
-        />
-        <StatCard
-          label="Average spread"
-          value={stats.avgSpread === null ? "--" : `${Math.round(stats.avgSpread * 100)}c`}
-        />
-        <StatCard label="Your resting orders" value={stats.ours === null ? "connect" : String(stats.ours)} />
-      </div>
-
-      <h3 className="section-head">Book by contract</h3>
-
-      {books === null ? (
-        <p className="read-idle">Reading the book…</p>
-      ) : books.length === 0 ? (
-        <EmptyState
-          title="Nothing is quoting"
-          hint="No live contract has a resting order. Start ec-maker and this fills within a cycle or two."
-        />
-      ) : (
-        <TableScroll label="Live books">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Contract</th>
-                <th className="num">Target</th>
-                <th className="num">Bid</th>
-                <th className="num">Ask</th>
-                <th className="num">Spread</th>
-                <th className="num">Depth</th>
-                <th className="num">Yours</th>
-                <th className="num">Closes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {books.map((b) => {
-                const { bid, ask, spread } = top(b);
-                const ours = mine ? [...b.bids, ...b.asks].filter((l) => l.owner === mine).length : null;
-                return (
-                  <tr key={b.marketId}>
-                    <td>
-                      <span className="asset-cell">
-                        <AssetMark asset={b.asset} size={18} />
-                        {b.asset} <span className="market-sub">{windowLabel(b.intervalSec)}</span>
-                      </span>
-                    </td>
-                    <td className="num">${money(b.strike)}</td>
-                    <td className="num">{bid === null ? <em className="read-idle">--</em> : cents(bid)}</td>
-                    <td className="num">{ask === null ? <em className="read-idle">--</em> : cents(ask)}</td>
-                    <td className={`num ${spread === null ? "muted-cell" : ""}`}>
-                      {spread === null ? "--" : `${Math.round(spread * 100)}c`}
-                    </td>
-                    <td className="num muted-cell">{b.bids.length}/{b.asks.length}</td>
-                    <td className="num">{ours === null ? "--" : ours}</td>
-                    <td className="num muted-cell">{countdown(b.expiry, now)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </TableScroll>
+      {!isPro && (
+        <div className="pro-banner">
+          <FaCrown className="pro-mark" aria-hidden="true" />
+          <div>
+            <strong>AI bots are a pro feature</strong>
+            <p>
+              A standard bot quotes around the book's own mid. A pro bot prices from a model read and lets you pick
+              which model runs it. {limits ? `${limits.proPrice} tUSDC a month.` : ""}
+            </p>
+          </div>
+          <button className="ghost-btn" disabled title="Billing is not wired up yet">Upgrade</button>
+        </div>
       )}
 
-      <p className="footnote">
-        Depth counts resting orders per side, not size. A contract with a bid and no ask is half quoted: it can be sold
-        into but not bought from, so its card still shows a price while being untradeable in one direction.
-      </p>
-    </div>
-  );
-}
+      {bots === null ? (
+        <p className="read-idle">Loading bots…</p>
+      ) : bots.length === 0 ? (
+        <EmptyState title="No bots yet" hint="A bot holds the settings a strategy runs with: market, stake, spread and a daily cap." />
+      ) : (
+        <div className="bot-grid">
+          {bots.map((bot) => (
+            <article key={bot.id} className={`bot-card ${bot.status}`}>
+              <header>
+                <span className={`bot-mark ${bot.kind}`}>{bot.kind === "ai" ? <FaBrain /> : <FaRobot />}</span>
+                <div className="bot-id">
+                  <h4>{bot.name}</h4>
+                  <span className="bot-kind">{bot.kind === "ai" ? "AI priced" : "Standard"}</span>
+                </div>
+                <span className={bot.status === "running" ? "bot-state on" : "bot-state"}>
+                  {bot.status === "running" ? "Running" : "Paused"}
+                </span>
+              </header>
 
-function StatCard({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
-  return (
-    <div className="stat-card">
-      <span className="stat-label">{label}</span>
-      <span className={`stat-value ${tone ?? ""}`}>{value}</span>
+              <dl className="bot-config">
+                <div>
+                  <dt><FaChartLine aria-hidden="true" /> Market</dt>
+                  <dd>{bot.asset === "BOTH" ? "BTC + ETH" : bot.asset}</dd>
+                </div>
+                <div>
+                  <dt><FaCoins aria-hidden="true" /> Stake</dt>
+                  <dd>{bot.stake} tUSDC</dd>
+                </div>
+                <div>
+                  <dt><FaSlidersH aria-hidden="true" /> Spread</dt>
+                  <dd>±{Math.round(bot.spread * 100)}c</dd>
+                </div>
+                <div>
+                  <dt>Daily cap</dt>
+                  <dd>{bot.dailyTrades === 0 ? "no cap" : `${bot.dailyTrades} trades`}</dd>
+                </div>
+                {bot.kind === "ai" && (
+                  <div className="bot-config-wide">
+                    <dt><FaBrain aria-hidden="true" /> Model</dt>
+                    <dd>{shortModel(bot.model)}</dd>
+                  </div>
+                )}
+              </dl>
+
+              <p className={bot.keyAddress ? "bot-signer set" : "bot-signer"}>
+                <FaKey aria-hidden="true" />
+                {bot.keyAddress
+                  ? `Signs as ${bot.keyAddress.slice(0, 6)}…${bot.keyAddress.slice(-4)}`
+                  : "No signing key — cannot place an order"}
+              </p>
+
+              <footer>
+                <button className="bot-btn" onClick={() => toggle(bot)}>
+                  {bot.status === "running" ? <><FaPause /> Pause</> : <><FaPlay /> Run</>}
+                </button>
+                <button className="bot-btn" onClick={() => { setEditing(bot); setOpen(true); }}>
+                  <FaPen /> Edit
+                </button>
+                <button className="bot-btn danger" onClick={() => drop(bot)} title={`Delete ${bot.name}`}>
+                  <FaTrash />
+                </button>
+              </footer>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {bots && limits && (
+        <p className="footnote">
+          {bots.length} of {limits.maxBots} bots used. A stored key is encrypted at rest, but the server decrypts it to
+          sign, so a bot's key is a hot wallet: fund it with what that bot should risk. Running is still a flag on the
+          config — nothing executes until the runner is wired to these definitions.
+        </p>
+      )}
+
+      {open && plan && limits && (
+        <BotForm
+          address={address}
+          plan={plan}
+          proPrice={limits.proPrice}
+          keyStorage={limits.keyStorage}
+          editing={editing}
+          onClose={() => setOpen(false)}
+          onSaved={() => {
+            setOpen(false);
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }

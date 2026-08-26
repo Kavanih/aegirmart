@@ -128,6 +128,80 @@ export type Position = {
   pnl: number | null;
 };
 
+export type BotKind = "standard" | "ai";
+
+export type Bot = {
+  id: string;
+  address: string;
+  name: string;
+  kind: BotKind;
+  asset: "BTC" | "ETH" | "BOTH";
+  stake: number;
+  dailyTrades: number;
+  spread: number;
+  model: string | null;
+  status: "running" | "paused";
+  createdAt: number;
+  updatedAt: number;
+  /** The address the stored signing key controls, or null when none is set. */
+  keyAddress: string | null;
+};
+
+export type Plan = { address: string; plan: "free" | "pro"; since: number; expires: number | null };
+export type BotLimits = {
+  maxBots: number;
+  proPrice: number;
+  assets: string[];
+  kinds: string[];
+  /** False when the server has no encryption secret, so no key can be stored. */
+  keyStorage: boolean;
+};
+export type BotDraft = Partial<Pick<Bot, "name" | "kind" | "asset" | "stake" | "dailyTrades" | "spread" | "model" | "status">>;
+
+export async function fetchBots(address: string): Promise<{ bots: Bot[]; plan: Plan; limits: BotLimits } | null> {
+  const res = await fetch(`/api/bots?address=${address}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+/** Resolves to an error string the form can show, or null on success. */
+export async function saveBot(address: string, draft: BotDraft, id?: string): Promise<string | null> {
+  const res = await fetch(id ? `/api/bots/${id}` : "/api/bots", {
+    method: id ? "PATCH" : "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ address, bot: draft }),
+  });
+  if (res.ok) return null;
+  return ((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Could not save the bot";
+}
+
+export async function removeBot(address: string, id: string): Promise<boolean> {
+  const res = await fetch(`/api/bots/${id}?address=${address}`, { method: "DELETE" });
+  return res.ok;
+}
+
+/** Sends the key once. It is sealed server side and never returned. */
+export async function storeBotKey(address: string, id: string, privateKey: string): Promise<string | null> {
+  const res = await fetch(`/api/bots/${id}/key`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ address, privateKey }),
+  });
+  if (res.ok) return null;
+  return ((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Could not store the key";
+}
+
+export async function clearBotKey(address: string, id: string): Promise<boolean> {
+  const res = await fetch(`/api/bots/${id}/key?address=${address}`, { method: "DELETE" });
+  return res.ok;
+}
+
+export async function fetchModels(): Promise<string[]> {
+  const res = await fetch("/api/models");
+  if (!res.ok) return [];
+  return ((await res.json()) as { models: string[] }).models;
+}
+
 export type BookLevel = { side: string; price: number; size: number; owner: string };
 export type MarketBook = {
   marketId: string;

@@ -40,7 +40,7 @@ const TRADE: { id: View; label: string }[] = [
 
 const ACCOUNT: { id: View; label: string }[] = [
   { id: "portfolio", label: "Positions" },
-  { id: "bot", label: "Maker bot" },
+  { id: "bot", label: "Bots" },
 ];
 
 type Props = { view: View; onSelect: (view: View) => void };

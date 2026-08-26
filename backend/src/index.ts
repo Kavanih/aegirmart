@@ -5,8 +5,10 @@ import { costBasisFor, type BasisIndex } from "./fills.js";
 import { startTracker, allRecords, modelScores, cachedPrediction, cachedPredictions } from "./tracker.js";
 import { allStats } from "./modelStats.js";
 import { buildEvidence } from "./quant.js";
-import { predict, quotaBlockedFor } from "./openrouter.js";
+import { predict, quotaBlockedFor, freeModels } from "./openrouter.js";
 import { TtlCache, RateLimiter } from "./cache.js";
+import { botsFor, createBot, updateBot, deleteBot, setBotKey, clearBotKey, planFor, MAX_BOTS, PRO_PRICE, ASSETS, KINDS } from "./bots.js";
+import { keyStorageReady } from "./keys.js";
 import { claimLiveSpend, budgetStatus } from "./budget.js";
 import type { PredictionResult } from "./openrouter.js";
 
@@ -19,6 +21,7 @@ const seriesCache = new TtlCache<{ t: number; price: number }[]>();
 const boardCache = new TtlCache<unknown>();
 const settledCache = new TtlCache<Awaited<ReturnType<typeof settledMarkets>>>();
 const bookCache = new TtlCache<Awaited<ReturnType<typeof liveBooks>>>();
+const modelCache = new TtlCache<string[]>();
 const limiter = new RateLimiter(20, 3000);
 
 const app = express();
@@ -264,6 +267,93 @@ app.get("/api/books", async (_req, res) => {
     res.json({ books: await bookCache.resolve("books", 5_000, () => liveBooks()) });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message, books: [] });
+  }
+});
+
+const ADDRESS = /^0x[0-9a-f]{40}$/;
+
+function requireAddress(raw: unknown, res: express.Response): string | null {
+  const address = String(raw ?? "").toLowerCase();
+  if (!ADDRESS.test(address)) {
+    res.status(400).json({ error: "valid address required" });
+    return null;
+  }
+  return address;
+}
+
+app.get("/api/bots", (req, res) => {
+  const address = requireAddress(req.query.address, res);
+  if (!address) return;
+  res.json({
+    bots: botsFor(address),
+    plan: planFor(address),
+    limits: { maxBots: MAX_BOTS, proPrice: PRO_PRICE, assets: ASSETS, kinds: KINDS, keyStorage: keyStorageReady() },
+  });
+});
+
+app.post("/api/bots", (req, res) => {
+  const address = requireAddress(req.body?.address, res);
+  if (!address) return;
+  const result = createBot(address, req.body?.bot ?? {});
+  if ("error" in result) {
+    res.status(400).json(result);
+    return;
+  }
+  res.status(201).json(result);
+});
+
+app.patch("/api/bots/:id", (req, res) => {
+  const address = requireAddress(req.body?.address, res);
+  if (!address) return;
+  const result = updateBot(address, String(req.params.id), req.body?.bot ?? {});
+  if ("error" in result) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.delete("/api/bots/:id", (req, res) => {
+  const address = requireAddress(req.query.address, res);
+  if (!address) return;
+  if (!deleteBot(address, String(req.params.id))) {
+    res.status(404).json({ error: "bot not found" });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+/**
+ * Store a signing key for one bot. The body carries a secret, so it is never
+ * logged and the response echoes only the address the key controls.
+ */
+app.put("/api/bots/:id/key", (req, res) => {
+  const address = requireAddress(req.body?.address, res);
+  if (!address) return;
+  const result = setBotKey(address, String(req.params.id), String(req.body?.privateKey ?? ""));
+  if ("error" in result) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json(result);
+});
+
+app.delete("/api/bots/:id/key", (req, res) => {
+  const address = requireAddress(req.query.address, res);
+  if (!address) return;
+  if (!clearBotKey(address, String(req.params.id))) {
+    res.status(404).json({ error: "bot not found" });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+// The models a pro bot can be pointed at. Reads the catalogue, never the model.
+app.get("/api/models", async (_req, res) => {
+  try {
+    res.json({ models: await modelCache.resolve("models", 3_600_000, () => freeModels()) });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message, models: [] });
   }
 });
 

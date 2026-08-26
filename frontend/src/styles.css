@@ -928,3 +928,100 @@ button.logo:hover .wordmark span { color: var(--text); }
 
 .page-head code { font-size: 11.5px; padding: 1px 5px; border-radius: 4px;
   background: var(--surface-2); border: 1px solid var(--line); }
+
+
+/* ---- Bots ---- */
+.bot-head-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.cta svg, .ghost-btn svg, .bot-btn svg { flex-shrink: 0; }
+.cta { display: inline-flex; align-items: center; gap: 8px; }
+
+.plan-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; border: 1px solid var(--line); color: var(--muted);
+  background: var(--surface); }
+.plan-pill.pro { color: var(--conf-medium); border-color: var(--conf-medium); background: var(--warn-bg); }
+
+.pro-banner { display: flex; align-items: center; gap: 15px; padding: 15px 17px; margin-bottom: 20px;
+  border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
+.pro-mark { font-size: 20px; color: var(--conf-medium); flex-shrink: 0; }
+.pro-banner strong { display: block; font-size: 13.5px; margin-bottom: 3px; }
+.pro-banner p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.55; max-width: 66ch; }
+.pro-banner .ghost-btn { margin-left: auto; }
+
+.ghost-btn { background: var(--surface); border: 1px solid var(--line); color: var(--text);
+  border-radius: 9px; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.ghost-btn:hover:not(:disabled) { border-color: var(--hover-line); }
+.ghost-btn:disabled { opacity: 0.5; cursor: default; }
+
+.bot-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(296px, 1fr)); }
+.bot-card { display: flex; flex-direction: column; gap: 13px; padding: 15px 16px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+/* A paused bot reads quieter without hiding anything. */
+.bot-card.paused { opacity: 0.78; }
+.bot-card:hover { border-color: var(--hover-line); opacity: 1; }
+.bot-card header { display: flex; align-items: center; gap: 11px; }
+.bot-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px;
+  font-size: 16px; flex-shrink: 0; background: var(--surface-2); color: var(--muted); }
+.bot-mark.ai { background: var(--warn-bg); color: var(--conf-medium); }
+.bot-mark.standard { background: var(--up-bg); color: var(--up-fg); }
+.bot-id { min-width: 0; }
+.bot-id h4 { margin: 0; font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bot-kind { font-size: 10.5px; color: var(--muted); }
+.bot-state { margin-left: auto; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--muted); padding: 4px 9px; border-radius: 999px;
+  border: 1px solid var(--line); white-space: nowrap; }
+.bot-state.on { color: var(--up); border-color: var(--up-line); background: var(--up-bg); }
+
+.bot-config { display: grid; grid-template-columns: 1fr 1fr; gap: 11px 14px; margin: 0;
+  padding: 12px 13px; background: var(--surface-2); border-radius: 10px; }
+.bot-config div { min-width: 0; }
+.bot-config-wide { grid-column: 1 / -1; }
+.bot-config dt { display: flex; align-items: center; gap: 6px; font-size: 9.5px; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--muted); margin-bottom: 3px; }
+.bot-config dd { margin: 0; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.bot-card footer { display: flex; gap: 7px; }
+.bot-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 1;
+  padding: 8px 0; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--text); }
+.bot-btn:hover { border-color: var(--hover-line); }
+.bot-btn.danger { flex: 0 0 42px; color: var(--down); }
+.bot-btn.danger:hover { border-color: var(--down-line); background: var(--down-bg); }
+
+/* ---- Bot form ---- */
+.bot-modal { display: flex; flex-direction: column; gap: 14px; max-width: 470px; width: 100%; }
+.field { display: flex; flex-direction: column; gap: 6px; border: none; padding: 0; margin: 0; min-width: 0; }
+.field > span, .field legend { font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.07em; padding: 0; }
+.field input, .field select { background: var(--surface-2); border: 1px solid var(--line); color: var(--text);
+  border-radius: 9px; padding: 10px 12px; font-size: 13.5px; font-family: inherit; width: 100%; }
+.field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.input-unit { position: relative; display: flex; align-items: center; }
+.input-unit input { padding-right: 58px; }
+.input-unit > span { position: absolute; right: 12px; font-size: 11px; color: var(--muted); pointer-events: none; }
+
+.kind-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.kind { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 12px;
+  border: 1px solid var(--line); border-radius: 11px; background: var(--surface-2); cursor: pointer;
+  text-align: left; color: var(--text); font-size: 18px; }
+.kind:hover:not(:disabled) { border-color: var(--hover-line); }
+.kind.on { border-color: var(--accent); background: var(--surface); }
+.kind:disabled { opacity: 0.55; cursor: not-allowed; }
+.kind-name { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 650; }
+.kind-lock { font-size: 10px; color: var(--conf-medium); }
+.kind-sub { font-size: 10.5px; font-weight: 400; color: var(--muted); line-height: 1.45; }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 2px; }
+
+/* Outranks the uppercase label rule, which this is not. */
+.field > span.field-note { display: flex; align-items: flex-start; gap: 7px; font-size: 10.5px;
+  line-height: 1.5; color: var(--muted); text-transform: none; letter-spacing: normal; font-weight: 400; }
+.field-note svg { margin-top: 2px; flex-shrink: 0; }
+.field > span { display: inline-flex; align-items: center; gap: 6px; }
+
+.bot-signer { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 11px;
+  color: var(--muted); }
+.bot-signer.set { color: var(--up); }
+.bot-signer svg { flex-shrink: 0; opacity: 0.8; }

@@ -22,7 +22,7 @@ const HEADING: Record<View, string> = {
   accuracy: "AI Scoreboard",
   leaderboard: "Leaderboard",
   portfolio: "Positions",
-  bot: "Maker bot",
+  bot: "Bots",
 };
 
 const VIEWS: View[] = ["markets", "swipe", "accuracy", "leaderboard", "portfolio", "bot"];
