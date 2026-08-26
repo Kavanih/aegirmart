@@ -1025,3 +1025,6 @@ button.logo:hover .wordmark span { color: var(--text); }
   color: var(--muted); }
 .bot-signer.set { color: var(--up); }
 .bot-signer svg { flex-shrink: 0; opacity: 0.8; }
+
+/* A leg offset by its pair: neither a win nor a loss. */
+.pos-result.wash { color: var(--muted); }

@@ -123,6 +123,9 @@ export type Position = {
   /** Settled and already redeemed on chain. */
   claimed: boolean;
   won: boolean | null;
+  /** Shares offset by the opposite leg: a minted set, not a directional bet. */
+  pairedShares: number;
+  minted: boolean;
   cost: number | null;
   averagePrice: number | null;
   pnl: number | null;

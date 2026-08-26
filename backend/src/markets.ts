@@ -287,6 +287,37 @@ export async function positionsFor(address: string, limit: number): Promise<Posi
   return data.OutcomeBalance.map(toPosition).filter((p) => p.marketId);
 }
 
+export type Redemption = { marketId: string; outcomeIndex: number; burned: number; collateralOut: number };
+
+/**
+ * What the account actually collected, per market and leg.
+ *
+ * Redeeming burns the outcome tokens, so a claimed position's size is gone from
+ * OutcomeBalance. Without this the payout has to be guessed from what is left,
+ * which is why realised P&L moved every time somebody claimed.
+ */
+export async function redemptionsFor(address: string, limit = 400): Promise<Redemption[]> {
+  const body = JSON.stringify({
+    query: `query Redemptions($holder: String!, $limit: Int!) {
+      RedemptionRecord(limit: $limit, where: {holder: {_eq: $holder}}) {
+        outcomeIdx amountBurned collateralOut
+        market { marketId }
+      }
+    }`,
+    variables: { holder: address.toLowerCase(), limit },
+  });
+
+  const data = await query<{ RedemptionRecord: Record<string, any>[] }>(body);
+  return data.RedemptionRecord
+    .filter((r) => r.market?.marketId)
+    .map((r) => ({
+      marketId: String(r.market.marketId),
+      outcomeIndex: Number(r.outcomeIdx),
+      burned: Number(r.amountBurned) / COLLATERAL_SCALE,
+      collateralOut: Number(r.collateralOut) / COLLATERAL_SCALE,
+    }));
+}
+
 export type BookLevel = { side: string; price: number; size: number; owner: string };
 export type MarketBook = {
   marketId: string;

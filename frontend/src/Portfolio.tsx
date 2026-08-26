@@ -179,13 +179,16 @@ export function Portfolio() {
   const stats = useMemo(() => {
     const rows = positions ?? [];
     const settled = rows.filter((p) => outcomeOf(p) !== "open");
-    const won = settled.filter((p) => outcomeOf(p) === "won");
+    // A minted leg is excluded: it wins by construction and says nothing about
+    // whether a call was right.
+    const directional = settled.filter((p) => !p.minted);
+    const won = directional.filter((p) => outcomeOf(p) === "won");
     // Already redeemed on chain, or redeemed in this session: not claimable.
     const claimable = won.filter((p) => !p.claimed && !claimed.has(p.outcomeId));
     return {
       open: rows.filter((p) => outcomeOf(p) === "open").length,
       settled: settled.length,
-      winRate: settled.length ? won.length / settled.length : 0,
+      winRate: directional.length ? won.length / directional.length : 0,
       claimable: claimable.reduce((sum, p) => sum + sharesOf(p) * PAYOUT_PER_SHARE, 0),
       realised: settled.reduce((sum, p) => sum + (p.pnl ?? 0), 0),
       staked: rows.reduce((sum, p) => sum + (p.cost ?? 0), 0),
@@ -379,8 +382,17 @@ export function Portfolio() {
                     <td className={`num pnl ${position.pnl === null ? "" : position.pnl >= 0 ? "win" : "loss"}`}>
                       {position.pnl === null ? "--" : `${position.pnl >= 0 ? "+" : ""}${fmt(position.pnl)}`}
                     </td>
-                    <td className={`num pos-result ${outcome === "won" ? "win" : outcome === "lost" ? "loss" : "open"}`}>
-                      {outcome === "won" ? "Won" : outcome === "lost" ? "Lost" : "Open"}
+                    <td
+                      className={`num pos-result ${
+                        position.minted ? "wash" : outcome === "won" ? "win" : outcome === "lost" ? "loss" : "open"
+                      }`}
+                      title={
+                        position.minted
+                          ? "Minted set: the opposite leg offsets this one, so the pair nets to nothing"
+                          : undefined
+                      }
+                    >
+                      {position.minted ? "Set" : outcome === "won" ? "Won" : outcome === "lost" ? "Lost" : "Open"}
                     </td>
                     {tab === "History" && <td className="num muted-cell">{stamp(position.expiry)}</td>}
                     <td className="num">
