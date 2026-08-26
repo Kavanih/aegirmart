@@ -14,16 +14,18 @@ type Props = {
   now: number;
   depth: number;
   stake: number;
+  /** Asks the model about this one contract. Absent once a read exists. */
+  onRead?: () => void;
 };
 
 function marketProbability(state: PredictionState, market: Market): number | null {
-  if (state.status === "ok" && state.evidence.marketProbability !== null) {
+  if (state.status === "ok" && state.evidence && state.evidence.marketProbability !== null) {
     return state.evidence.marketProbability;
   }
   return market.lastPrice;
 }
 
-export function Card({ market, prediction, series, spot, swipe, now, depth, stake }: Props) {
+export function Card({ market, prediction, series, spot, swipe, now, depth, stake, onRead }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const isTop = depth === 0;
@@ -106,8 +108,14 @@ export function Card({ market, prediction, series, spot, swipe, now, depth, stak
           </div>
 
           <div className="model-row">
-            {model_p === null ? (
-              <span className="unavailable">Model read unavailable</span>
+            {model_p === null && prediction.status === "idle" ? (
+              <button className="ask-model" onClick={onRead} disabled={!onRead}>
+                Read this contract
+              </button>
+            ) : model_p === null ? (
+              <span className="unavailable">
+                {prediction.status === "rate_limited" ? "Slow down a moment" : "Model read unavailable"}
+              </span>
             ) : (
               <>
                 <span className="model-read">Model {cents(model_p)}</span>
@@ -137,7 +145,9 @@ export function Card({ market, prediction, series, spot, swipe, now, depth, stak
       {prediction.status === "ok" && expanded && (
         <div className="reasoning">
           <p>{prediction.prediction.reasoning}</p>
-          <ul>{prediction.prediction.key_factors.map((f, i) => <li key={i}>{f}</li>)}</ul>
+          {prediction.prediction.key_factors && prediction.prediction.key_factors.length > 0 && (
+            <ul>{prediction.prediction.key_factors.map((f, i) => <li key={i}>{f}</li>)}</ul>
+          )}
         </div>
       )}
 

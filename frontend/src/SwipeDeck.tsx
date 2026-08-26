@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "./Card";
-import { fetchMarkets, fetchPrediction, title, type Market, type PredictionState, type PricePoint } from "./api";
+import { fetchMarkets, fetchPrediction, fetchPredictions, recordToState, title, type Market, type PredictionState, type PricePoint } from "./api";
 import { useSwipe, type Direction } from "./useSwipe";
 import { useAccount } from "wagmi";
 import { useTrade } from "./wallet/useTrade";
@@ -97,18 +97,43 @@ export function SwipeDeck({ intervalSec, focusMarketId }: DeckProps) {
     setIndex(at);
   }, [focusMarketId, live]);
 
-  // Resolve the top card and the next two so the estimate is ready on arrival.
+  // Stored reads only. Asking the model for every card that scrolls past is
+  // what drains the daily allowance, so a card arrives idle and the read is
+  // requested by hand.
   useEffect(() => {
-    deck.forEach((market) => {
-      if (predictions[market.marketId]) return;
-      setPredictions((p) => ({ ...p, [market.marketId]: { status: "loading" } }));
-      fetchPrediction(market)
-        .then((state) => setPredictions((p) => ({ ...p, [market.marketId]: state })))
-        .catch(() =>
-          setPredictions((p) => ({ ...p, [market.marketId]: { status: "unavailable", reason: "network" } })),
-        );
+    const ids = deck.map((m) => m.marketId).filter((id) => !predictions[id]);
+    if (ids.length === 0) return;
+
+    let alive = true;
+    setPredictions((p) => {
+      const next = { ...p };
+      for (const id of ids) next[id] ??= { status: "idle" };
+      return next;
     });
+
+    fetchPredictions(ids).then((records) => {
+      if (!alive || records.length === 0) return;
+      setPredictions((p) => {
+        const next = { ...p };
+        for (const r of records) next[r.marketId] = recordToState(r);
+        return next;
+      });
+    });
+
+    return () => {
+      alive = false;
+    };
   }, [deck, predictions]);
+
+  /** Spends one call from the daily allowance, for this contract only. */
+  const requestRead = useCallback((market: Market) => {
+    setPredictions((p) => ({ ...p, [market.marketId]: { status: "loading" } }));
+    fetchPrediction(market)
+      .then((state) => setPredictions((p) => ({ ...p, [market.marketId]: state })))
+      .catch(() =>
+        setPredictions((p) => ({ ...p, [market.marketId]: { status: "unavailable", reason: "network" } })),
+      );
+  }, []);
 
   const top = deck[0];
   const topPrediction = top ? predictions[top.marketId] ?? { status: "loading" as const } : null;
@@ -222,13 +247,14 @@ export function SwipeDeck({ intervalSec, focusMarketId }: DeckProps) {
                 <Card
                   key={market.marketId}
                   market={market}
-                  prediction={predictions[market.marketId] ?? { status: "loading" }}
+                  prediction={predictions[market.marketId] ?? { status: "idle" }}
                   series={series[market.asset] ?? []}
                   spot={spot[market.asset] ?? null}
                   swipe={depth === 0 ? state : undefined}
                   now={now}
                   depth={depth}
                   stake={stake}
+                  onRead={depth === 0 ? () => requestRead(market) : undefined}
                 />
               ))
               .reverse()}

@@ -118,9 +118,43 @@ export function Portfolio() {
   const { address, isConnected } = useAccount();
   const [positions, setPositions] = useState<Position[] | null>(null);
   const [failed, setFailed] = useState(false);
-  const [tab, setTab] = useState<Tab>("Positions");
+  // Remembered so a reload does not silently drop you back to Positions, where
+  // the sort options are different and an option can look like it vanished.
+  const [tab, setTab] = useState<Tab>(() => {
+    try {
+      const saved = localStorage.getItem("aegirmart:portfolio-tab");
+      if (saved && (TABS as readonly string[]).includes(saved)) return saved as Tab;
+    } catch {
+      // Private windows throw; the default is fine.
+    }
+    return "Positions";
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("aegirmart:portfolio-tab", tab);
+    } catch {
+      // Remembering the tab is a convenience, never a requirement.
+    }
+  }, [tab]);
   const [assetFilter, setAssetFilter] = useState<AssetFilter>("All");
-  const [sort, setSort] = useState<Sort>("Newest");
+  const [sort, setSort] = useState<Sort>(() => {
+    try {
+      const saved = localStorage.getItem("aegirmart:portfolio-sort");
+      if (saved) return saved as Sort;
+    } catch {
+      // Default is fine.
+    }
+    return "Newest";
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("aegirmart:portfolio-sort", sort);
+    } catch {
+      // Convenience only.
+    }
+  }, [sort]);
   const [claimed, setClaimed] = useState<Set<string>>(() => new Set());
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
 
@@ -136,6 +170,11 @@ export function Portfolio() {
   };
 
   useEffect(load, [address]);
+
+  // A remembered sort can belong to a different tab than the remembered one.
+  useEffect(() => {
+    if (!(SORTS[tab] as readonly string[]).includes(sort)) setSort("Newest");
+  }, [tab, sort]);
 
   const stats = useMemo(() => {
     const rows = positions ?? [];

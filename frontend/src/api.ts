@@ -25,12 +25,15 @@ export type Prediction = {
   probability: number;
   confidence: "low" | "medium" | "high";
   reasoning: string;
-  key_factors: string[];
+  /** Absent on a stored read, which keeps only the numbers and the reasoning. */
+  key_factors?: string[];
 };
 
 export type PredictionState =
+  /** No read yet and none asked for. Costs nothing and stays that way. */
+  | { status: "idle" }
   | { status: "loading" }
-  | { status: "ok"; prediction: Prediction; evidence: Evidence; model: string }
+  | { status: "ok"; prediction: Prediction; evidence?: Evidence; model: string }
   | { status: "unavailable"; reason: string; evidence?: Evidence }
   | { status: "rate_limited"; retryAfter: number };
 
@@ -253,6 +256,15 @@ export function ago(expiry: number, now: number): string {
  * Reads the tracker's stored predictions. Costs nothing against the model
  * allowance, so the grid can poll it as often as it polls markets.
  */
+/** Turns a stored record into the shape a card renders, without a model call. */
+export function recordToState(r: PredictionRecord): PredictionState {
+  return {
+    status: "ok",
+    model: r.model,
+    prediction: { probability: r.probability, confidence: r.confidence, reasoning: r.reasoning },
+  };
+}
+
 export async function fetchPredictions(ids: string[]): Promise<PredictionRecord[]> {
   if (ids.length === 0) return [];
   const res = await fetch(`/api/predictions?ids=${ids.join(",")}`);

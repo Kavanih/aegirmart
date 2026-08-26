@@ -488,12 +488,23 @@ body {
 /* An order's fate, at a glance: filled is a result, expired and cancelled are
    not failures of the app but they are not fills either. */
 /* Sits with the filter pills but reads as a control, not another toggle. */
-.sort-control { display: inline-flex; align-items: center; gap: 7px; margin-left: auto;
-  font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
-.sort-control select { background: var(--surface); color: var(--text); cursor: pointer;
-  border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px;
-  font-size: 12px; font-family: inherit; text-transform: none; letter-spacing: normal; }
+.sort-control { position: relative; display: inline-flex; align-items: center; gap: 8px;
+  margin-left: auto; font-size: 10px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.08em; }
+/* Native select, restyled: the arrow is drawn here so it matches the palette
+   instead of inheriting the OS one, which ignores the dark theme. */
+.sort-control select { appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  background: var(--surface); color: var(--text); cursor: pointer;
+  border: 1px solid var(--line); border-radius: 9px; padding: 7px 30px 7px 12px;
+  font-size: 12.5px; font-weight: 500; font-family: inherit;
+  text-transform: none; letter-spacing: normal; }
 .sort-control select:hover { border-color: var(--hover-line); }
+.sort-control select:focus-visible { outline: none; border-color: var(--accent); }
+.sort-control::after { content: ""; position: absolute; right: 12px; top: 50%; width: 8px; height: 8px;
+  margin-top: -5px; border-right: 1.6px solid var(--muted); border-bottom: 1.6px solid var(--muted);
+  transform: rotate(45deg); pointer-events: none; }
+/* The popup list is the OS's, so give it colours it can actually use. */
+.sort-control option { background: var(--surface); color: var(--text); }
 
 .order-status { font-weight: 600; }
 .order-status.filled { color: var(--up); }
