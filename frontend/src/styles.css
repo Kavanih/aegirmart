@@ -941,6 +941,7 @@ button.logo:hover .wordmark span { color: var(--text); }
 
 /* ---- Maker bot ---- */
 /* A stat that is also a shortcut into the rows behind it. */
+.stat-note { font-size: 10px; color: var(--muted); margin-top: 3px; }
 .stat-card.as-action { cursor: pointer; text-align: left; font: inherit; width: 100%; }
 .stat-card.as-action:hover { border-color: var(--accent); }
 

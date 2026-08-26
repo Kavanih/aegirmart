@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
-import { fetchOrders, fetchPositions, money, shortAddress, stamp, windowLabel, type OrderRow, type Position } from "./api";
+import { fetchOrders, fetchPositions, money, shortAddress, stamp, windowLabel, type BotStats, type OrderRow, type Position } from "./api";
 import { useClaim } from "./wallet/useClaim";
 import { fmt, PAYOUT_PER_SHARE } from "./payout";
 import { useToast } from "./Toast";
@@ -92,17 +92,20 @@ function StatCard({
   label,
   value,
   tone,
+  note,
   onClick,
 }: {
   label: string;
   value: string;
   tone?: "good" | "bad";
+  note?: string;
   onClick?: () => void;
 }) {
   const body = (
     <>
       <span className="stat-label">{label}</span>
       <span className={`stat-value ${tone ?? ""}`}>{value}</span>
+      {note && <span className="stat-note">{note}</span>}
     </>
   );
 
@@ -157,6 +160,7 @@ export function Portfolio() {
   }, [sort]);
   const [claimed, setClaimed] = useState<Set<string>>(() => new Set());
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
+  const [serverStats, setServerStats] = useState<BotStats | null>(null);
 
   const { claim, claiming } = useClaim();
   const toast = useToast();
@@ -165,7 +169,12 @@ export function Portfolio() {
     if (!address) return;
     setPositions(null);
     setFailed(false);
-    fetchPositions(address).then(setPositions).catch(() => setFailed(true));
+    fetchPositions(address)
+      .then((d) => {
+        setPositions(d.positions);
+        setServerStats(d.stats);
+      })
+      .catch(() => setFailed(true));
     fetchOrders(address).then(setOrders).catch(() => setOrders([]));
   };
 
@@ -271,6 +280,11 @@ export function Portfolio() {
           label="Realised P&L"
           value={`${stats.realised >= 0 ? "+" : ""}${fmt(stats.realised)}`}
           tone={stats.realised >= 0 ? "good" : "bad"}
+          note={
+            serverStats && serverStats.unpriced > 0
+              ? `covers ${serverStats.priced} of ${serverStats.settled}`
+              : undefined
+          }
         />
         <StatCard label="Total loss" value={fmt(stats.lost)} tone={stats.lost > 0 ? "bad" : undefined} />
         <StatCard
@@ -411,6 +425,14 @@ export function Portfolio() {
           </table>
           </TableScroll>
         )
+      )}
+
+      {serverStats && serverStats.unpriced > 0 && (
+        <p className="footnote">
+          {serverStats.unpriced} settled {serverStats.unpriced === 1 ? "row has" : "rows have"} no cost behind them, so
+          they sit outside the P&L figures. A position minted as a complete set leaves no trade on chain, so nothing
+          records what it cost.
+        </p>
       )}
 
       {filtered.some((p) => p.minted) && (

@@ -275,7 +275,7 @@ export async function positionsFor(address: string, limit: number): Promise<Posi
           account: {_eq: $account}
           _or: [{balance: {_gt: "0"}}, {market: {finalized: {_eq: true}}}]
         }
-        order_by: {balance: desc}
+        order_by: {market: {expiry: desc}}
       ) {
         ${POSITION_FIELDS}
       }
@@ -521,7 +521,7 @@ export async function ordersFor(address: string, limit: number): Promise<OrderRo
       Order(limit: $limit, where: {owner: {_eq: $account}}, order_by: {placedAtTimestamp: desc}) {
         orderId side price fullQuantity filledQuantity quantityRemaining status rested
         placedAtTimestamp placedTxHash
-        market { marketId asset intervalSec strike expiry }
+        market { marketId asset intervalSec strike expiry finalized }
       }
     }`,
     variables: { account: address.toLowerCase(), limit },
@@ -530,7 +530,10 @@ export async function ordersFor(address: string, limit: number): Promise<OrderRo
   const data = await query<{ Order: Record<string, any>[] }>(body);
   return data.Order
     .filter((o) => o.market?.marketId)
-    .map((o) => ({
+    .map((o) => {
+      const expiry = Number(o.market.expiry ?? 0);
+      const expired = Boolean(o.market.finalized) || expiry * 1000 < Date.now();
+      return {
       orderId: String(o.orderId),
       marketId: String(o.market.marketId),
       asset: String(o.market.asset ?? ""),
@@ -546,11 +549,14 @@ export async function ordersFor(address: string, limit: number): Promise<OrderRo
       quantity: Number(o.fullQuantity) / COLLATERAL_SCALE,
       filled: Number(o.filledQuantity) / COLLATERAL_SCALE,
       remaining: Number(o.quantityRemaining) / COLLATERAL_SCALE,
-      status: String(o.status ?? ""),
+      // The indexer leaves orders on settled markets as "Open" indefinitely.
+      // Nothing can fill there, so reporting it as working is a lie.
+      status: expired && String(o.status) === "Open" ? "Expired" : String(o.status ?? ""),
       rested: Boolean(o.rested),
       placedAt: Number(o.placedAtTimestamp ?? 0),
       txHash: String(o.placedTxHash ?? ""),
-    }));
+      };
+    });
 }
 
 export type TraderRow = { account: string; settled: number; wins: number; winRate: number; volume: number };

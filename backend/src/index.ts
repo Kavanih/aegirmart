@@ -211,7 +211,11 @@ app.get("/api/positions", async (req, res) => {
     const botMarkets = botMarketsFor(address);
     const mine = botMarkets.size > 0 ? priced.filter((p) => !botMarkets.has(p.marketId)) : priced;
 
-    res.json({ positions: mine, botFiltered: priced.length - mine.length });
+    res.json({
+      positions: mine,
+      botFiltered: priced.length - mine.length,
+      stats: summarise(mine),
+    });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message, positions: [] });
   }
@@ -251,7 +255,7 @@ app.get("/api/market/:marketId", async (req, res) => {
     // leaves no position and no trade, so without this the page that placed it
     // shows no sign of it at all.
     const myOrders = ADDRESS.test(holder)
-      ? (await ordersFor(holder, 60).catch(() => [])).filter((o) => o.marketId === marketId)
+      ? (await ordersFor(holder, 300).catch(() => [])).filter((o) => o.marketId === marketId)
       : [];
 
     const holdings = ADDRESS.test(holder)
@@ -441,7 +445,7 @@ app.get("/api/bots/:id/activity", async (req, res) => {
     res.json({
       bot, orders: [],
       summary: { placed: 0, filled: 0, open: 0, expired: 0, volume: 0 },
-      stats: { settled: 0, won: 0, winRate: 0, realised: 0, lost: 0 },
+      stats: { settled: 0, won: 0, winRate: 0, realised: 0, lost: 0, priced: 0, unpriced: 0 },
     });
     return;
   }
@@ -487,7 +491,7 @@ app.get("/api/orders", async (req, res) => {
     return;
   }
   try {
-    res.json({ orders: await ordersFor(address, 60) });
+    res.json({ orders: await ordersFor(address, 200) });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message, orders: [] });
   }

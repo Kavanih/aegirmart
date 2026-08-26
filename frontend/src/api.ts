@@ -215,7 +215,15 @@ export type Bot = {
 };
 
 export type BotSummary = { placed: number; filled: number; open: number; expired: number; volume: number };
-export type BotStats = { settled: number; won: number; winRate: number; realised: number; lost: number };
+export type BotStats = {
+  settled: number;
+  won: number;
+  winRate: number;
+  realised: number;
+  lost: number;
+  priced: number;
+  unpriced: number;
+};
 
 export async function fetchBotActivity(address: string, id: string): Promise<{
   bot: Bot;
@@ -446,10 +454,10 @@ export async function fetchLeaderboard(): Promise<Trader[]> {
   return ((await res.json()) as { traders: Trader[] }).traders;
 }
 
-export async function fetchPositions(address: string): Promise<Position[]> {
+export async function fetchPositions(address: string): Promise<{ positions: Position[]; stats: BotStats }> {
   const res = await fetch(`/api/positions?address=${address}`);
   if (!res.ok) throw new Error(`positions ${res.status}`);
-  return ((await res.json()) as { positions: Position[] }).positions;
+  return (await res.json()) as { positions: Position[]; stats: BotStats };
 }
 
 export type PredictionRecord = {
