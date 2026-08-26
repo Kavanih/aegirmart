@@ -18,7 +18,7 @@ type AssetFilter = "All" | "BTC" | "ETH";
 const SORTS = {
   Positions: ["Newest", "Oldest", "Largest"],
   Orders: ["Newest", "Oldest", "Largest", "Filled first"],
-  History: ["Newest", "Oldest", "Best result", "Worst result"],
+  History: ["Newest", "Oldest", "Best result", "Worst result", "Unclaimed first"],
 } as const;
 
 type Sort = (typeof SORTS)[Tab][number];
@@ -88,12 +88,29 @@ function OrdersTable({ orders }: { orders: OrderRow[] | null }) {
   );
 }
 
-function StatCard({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
-  return (
-    <div className="stat-card">
+function StatCard({
+  label,
+  value,
+  tone,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  tone?: "good" | "bad";
+  onClick?: () => void;
+}) {
+  const body = (
+    <>
       <span className="stat-label">{label}</span>
       <span className={`stat-value ${tone ?? ""}`}>{value}</span>
-    </div>
+    </>
+  );
+
+  if (!onClick) return <div className="stat-card">{body}</div>;
+  return (
+    <button className="stat-card as-action" onClick={onClick} title={`Show ${label.toLowerCase()}`}>
+      {body}
+    </button>
   );
 }
 
@@ -148,14 +165,20 @@ export function Portfolio() {
         : byAsset.filter((p) => outcomeOf(p) === "open");
 
     const pnl = (p: Position) => p.pnl ?? 0;
+    // A win still sitting on chain: what the Unclaimed stat counts, and the
+    // only rows with a Claim button.
+    const owed = (p: Position) =>
+      outcomeOf(p) === "won" && !p.claimed && !claimed.has(p.outcomeId) ? 1 : 0;
+
     return [...rowsForTab].sort((a, b) => {
       if (sort === "Oldest") return a.expiry - b.expiry;
       if (sort === "Largest") return sharesOf(b) - sharesOf(a);
       if (sort === "Best result") return pnl(b) - pnl(a);
       if (sort === "Worst result") return pnl(a) - pnl(b);
+      if (sort === "Unclaimed first") return owed(b) - owed(a) || sharesOf(b) - sharesOf(a);
       return b.expiry - a.expiry;
     });
-  }, [positions, assetFilter, tab, sort]);
+  }, [positions, assetFilter, tab, sort, claimed]);
 
   const sortedOrders = useMemo(() => {
     const rows = (orders ?? []).filter((o) => assetFilter === "All" || o.asset === assetFilter);
@@ -212,6 +235,14 @@ export function Portfolio() {
           label="Unclaimed"
           value={fmt(stats.claimable)}
           tone={stats.claimable > 0 ? "good" : undefined}
+          onClick={
+            stats.claimable > 0
+              ? () => {
+                  setTab("History");
+                  setSort("Unclaimed first");
+                }
+              : undefined
+          }
         />
       </div>
 

@@ -57,6 +57,27 @@ sides. If it reports no markets, the venue id is wrong.
 Set `DRY_RUN=false` in `.env`, then run it again. Within a cycle or two,
 AEGIRMART cards should show real cent prices instead of `--`.
 
+## The bot pays itself from the faucet
+
+`ec-core` tops up collateral before it seeds a market:
+
+    if (collateralBal < 1_000n * one && config.faucetEnabled) {
+      await exchange.trader.faucet();
+
+So any time the wallet drops under 1,000 tUSDC while the bot is seeding, it
+draws **10,000 tUSDC** from the testnet faucet. `faucetEnabled` is on by default
+off mainnet. It is a mint from the zero address, not a transfer from anywhere.
+
+This is fine and necessary: the sell side mints complete sets, which needs
+collateral on hand. But it means the wallet balance stops being a scorecard.
+A jump from a few hundred to five figures is the faucet, not a good session.
+
+Read realised P&L on the Positions page instead. That is computed from fills
+and settlements, so faucet money never enters it.
+
+Set `FAUCET_ENABLED=false` to stop it, and accept that the bot goes quiet on the
+sell side once it runs dry.
+
 ## Things that will bite you
 
 - **Do not run two bots on one key.** Both senders race the same nonce.
@@ -66,6 +87,14 @@ AEGIRMART cards should show real cent prices instead of `--`.
 - **Leave `AUTO_CLAIM=true`.** Settled markets pay out only when asked. A bot
   that trades for hours without claiming has its balance spread across finished
   markets while the wallet reads near zero.
+- **`npm run ec:doctor` crashes on its own wallet printout.** It reads
+  `client.publicClient`, which the installed core does not expose. The venue
+  and market-count lines above the crash are still good, and the bot itself is
+  unaffected. Do not read the stack trace as a config problem.
+- **Nothing restarts the bot.** It is a plain foreground process; `nohup` keeps
+  it alive across a closed terminal but nothing brings it back after a reboot,
+  a crash, or an OOM kill. Check the maker bot page in AEGIRMART before you
+  trust the book.
 - **Venue ids move.** They changed three times in the first week of August. If
   the bot finds no markets, read the venue id off a live market row.
 - **A reverted write does not throw.** The SDK skips simulation, so a failed

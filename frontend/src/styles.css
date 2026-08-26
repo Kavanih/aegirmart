@@ -875,10 +875,25 @@ button.logo:hover .wordmark span { color: var(--text); }
 .ticket-cta:disabled { background: var(--surface-2); color: var(--muted); cursor: default; }
 .ticket-fine { margin: 0; font-size: 10.5px; line-height: 1.55; color: var(--muted); }
 
-/* The card title is a link to the contract, but must not look like a button. */
+/* The card title is a link to the contract, but must not look like a button.
+   Its ::after stretches over the whole card so the entire tile opens the
+   contract, while Up and Down stay above it and keep their own actions. */
 .market-title.as-link { background: none; border: none; padding: 0; text-align: left; cursor: pointer;
   color: inherit; font: inherit; }
+.market-title.as-link::after { content: ""; position: absolute; inset: 0; z-index: 0; }
 .market-title.as-link:hover h4 { color: var(--accent); }
+.market-card:has(.as-link:hover) { border-color: var(--hover-line); }
+
+.market-card { position: relative; }
+/* Anything interactive has to out-rank the stretched link. */
+.market-card .market-actions,
+.market-card footer,
+.market-card .market-read { position: relative; z-index: 1; }
+
+.market-card .go-hint { position: absolute; top: 14px; right: 14px; z-index: 0;
+  font-size: 10px; color: var(--muted); opacity: 0; transition: opacity 140ms ease; }
+.market-card:has(.as-link:hover) .go-hint { opacity: 0.85; }
+@media (prefers-reduced-motion: reduce) { .market-card .go-hint { transition: none; } }
 
 @media (max-width: 900px) {
   .detail { grid-template-columns: minmax(0, 1fr); }
@@ -887,6 +902,10 @@ button.logo:hover .wordmark span { color: var(--text); }
 
 
 /* ---- Maker bot ---- */
+/* A stat that is also a shortcut into the rows behind it. */
+.stat-card.as-action { cursor: pointer; text-align: left; font: inherit; width: 100%; }
+.stat-card.as-action:hover { border-color: var(--accent); }
+
 .bot-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px; border-radius: 999px;
   font-size: 11.5px; font-weight: 600; border: 1px solid var(--line); color: var(--muted);
   background: var(--surface); white-space: nowrap; }
