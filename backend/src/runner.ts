@@ -184,10 +184,10 @@ async function cycle(): Promise<void> {
         recordBotFill(bot.id, market.marketId);
         bot.tradesToday += 1;
         // Attribution by strategy, which the chain cannot give: several bots
-        // may share one key and look like a single trader.
-        if (bot.kind !== "standard") {
-          recordBotTrade(bot.id, bot.kind, market.marketId, side === "yes" ? 0 : 1);
-        }
+        // may share one key and look like a single trader. A maker is recorded
+        // too, so its trade count is right; only its win RATE is meaningless,
+        // and that is handled where the table is built.
+        recordBotTrade(bot.id, bot.kind, market.marketId, side === "yes" ? 0 : 1);
         log(`${bot.name} ${market.asset} ${market.intervalSec}s ${side} ${result.shares.toFixed(2)}@${Math.round(result.price * 100)}c`);
       }
     }
