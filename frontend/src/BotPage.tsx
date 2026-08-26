@@ -99,11 +99,11 @@ export function BotPage() {
           <div>
             <strong>AI bots are a pro feature</strong>
             <p>
-              A standard bot quotes around the book's own mid. A pro bot prices from a model read and lets you pick
-              which model runs it. {limits ? `${limits.proPrice} tUSDC a month.` : ""}
+              A standard bot quotes around the book's own mid. A paid plan lets a model price the quotes and lets you
+              pick which model runs each bot. From 15 tUSDC a month.
             </p>
           </div>
-          <button className="ghost-btn" disabled title="Billing is not wired up yet">Upgrade</button>
+          <button className="ghost-btn" onClick={() => { window.location.hash = "#/pricing"; }}>See plans</button>
         </div>
       )}
 

@@ -1,6 +1,6 @@
 import { Logo } from "./Logo";
 
-export type View = "markets" | "swipe" | "accuracy" | "leaderboard" | "portfolio" | "bot";
+export type View = "markets" | "swipe" | "accuracy" | "leaderboard" | "portfolio" | "bot" | "pricing";
 
 const stroke = {
   fill: "none",
@@ -23,6 +23,9 @@ const Icon = {
   leaderboard: () => (
     <svg viewBox="0 0 24 24" {...stroke} aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6" /></svg>
   ),
+  pricing: () => (
+    <svg viewBox="0 0 24 24" {...stroke} aria-hidden="true"><path d="M12 3l2.4 5.3 5.6.6-4.2 3.9 1.2 5.7L12 15.8 6.9 18.5l1.2-5.7L4 8.9l5.6-.6z" /></svg>
+  ),
   bot: () => (
     <svg viewBox="0 0 24 24" {...stroke} aria-hidden="true"><rect x="4" y="8" width="16" height="11" rx="2.5" /><path d="M12 8V4.5M9 13h.01M15 13h.01M9.5 16h5" /></svg>
   ),
@@ -41,6 +44,7 @@ const TRADE: { id: View; label: string }[] = [
 const ACCOUNT: { id: View; label: string }[] = [
   { id: "portfolio", label: "Positions" },
   { id: "bot", label: "Bots" },
+  { id: "pricing", label: "Plans" },
 ];
 
 type Props = { view: View; onSelect: (view: View) => void };

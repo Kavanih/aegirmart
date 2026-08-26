@@ -6,6 +6,7 @@ import { Portfolio } from "./Portfolio";
 import { Accuracy } from "./Accuracy";
 import { MarketDetail } from "./MarketDetail";
 import { BotPage } from "./BotPage";
+import { Pricing } from "./Pricing";
 import { Sidebar, type View } from "./Sidebar";
 import { ThemeToggle } from "./Theme";
 import { ConnectWallet } from "./wallet/ConnectWallet";
@@ -23,9 +24,10 @@ const HEADING: Record<View, string> = {
   leaderboard: "Leaderboard",
   portfolio: "Positions",
   bot: "Bots",
+  pricing: "Plans",
 };
 
-const VIEWS: View[] = ["markets", "swipe", "accuracy", "leaderboard", "portfolio", "bot"];
+const VIEWS: View[] = ["markets", "swipe", "accuracy", "leaderboard", "portfolio", "bot", "pricing"];
 
 /** The address bar is the source of truth, so a reload lands where you were. */
 function readHash(): { view: View; detailId: string | null } {
@@ -119,6 +121,7 @@ export function App() {
           {view === "leaderboard" && <Leaderboard />}
           {view === "portfolio" && <Portfolio />}
           {view === "bot" && <BotPage />}
+          {view === "pricing" && <Pricing />}
           {view === "swipe" && (
             <>
               <div className="lane-row">

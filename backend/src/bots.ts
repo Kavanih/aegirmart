@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { seal, open as openSealed, normalizeKey, keyStorageReady, type SealedKey } from "./keys.js";
+import { subscriptionFor, tierSpec, type Subscription } from "./plans.js";
 
 /**
  * Bot definitions and plan state.
@@ -52,7 +53,7 @@ export function publicBot(bot: Bot): PublicBot {
   return { ...rest, keyAddress: key?.address ?? null };
 }
 
-export type Plan = { address: string; plan: "free" | "pro"; since: number; expires: number | null };
+export type Plan = Subscription;
 
 function load<T>(path: string): Record<string, T> {
   if (!existsSync(path)) return {};
@@ -106,14 +107,7 @@ export function recordBotFill(id: string): void {
 }
 
 export function planFor(addressRaw: string): Plan {
-  const address = addressRaw.toLowerCase();
-  const existing = plans[address];
-  // An expired subscription silently reverts rather than staying pro forever.
-  if (existing && existing.plan === "pro" && existing.expires !== null && existing.expires < Date.now()) {
-    plans[address] = { address, plan: "free", since: Date.now(), expires: null };
-    persist();
-  }
-  return plans[address] ?? { address, plan: "free", since: 0, expires: null };
+  return subscriptionFor(addressRaw);
 }
 
 export function botsFor(addressRaw: string): PublicBot[] {
@@ -164,7 +158,10 @@ type BotFields = Pick<Bot, "name" | "kind" | "asset" | "stake" | "dailyTrades" |
 function clean(draft: BotDraft, plan: Plan, current?: Bot): { bot: BotFields } | { error: string } {
   const kind = draft.kind ?? current?.kind ?? "standard";
   if (!KINDS.includes(kind)) return { error: "kind must be standard or ai" };
-  if (kind === "ai" && plan.plan !== "pro") return { error: `An AI bot needs the pro plan (${PRO_PRICE} tUSDC a month)` };
+  const spec = tierSpec(plan.plan);
+  if (kind === "ai" && !spec.aiBots) {
+    return { error: "An AI bot needs the Starter plan or better" };
+  }
 
   const asset = draft.asset ?? current?.asset ?? "BOTH";
   if (!ASSETS.includes(asset)) return { error: "asset must be BTC, ETH or BOTH" };
@@ -178,6 +175,10 @@ function clean(draft: BotDraft, plan: Plan, current?: Bot): { bot: BotFields } |
   const dailyTrades = Math.floor(Number(draft.dailyTrades ?? current?.dailyTrades ?? 50));
   if (!Number.isFinite(dailyTrades) || dailyTrades < 0 || dailyTrades > 10_000) {
     return { error: "daily trades must be between 0 and 10,000" };
+  }
+  // A tier's ceiling is enforced here, not just shown in the pricing table.
+  if (spec.dailyTrades > 0 && (dailyTrades === 0 || dailyTrades > spec.dailyTrades)) {
+    return { error: `The ${spec.name} plan allows ${spec.dailyTrades} trades a day` };
   }
 
   const spread = Number(draft.spread ?? current?.spread ?? 0.02);

@@ -131,6 +131,58 @@ export type Position = {
   pnl: number | null;
 };
 
+export type Tier = "free" | "starter" | "pro";
+export type Cycle = "monthly" | "yearly";
+
+export type TierSpec = {
+  id: Tier;
+  name: string;
+  tagline: string;
+  monthly: number;
+  yearly: number;
+  yearlyDiscount: number;
+  dailyTrades: number;
+  aiBots: boolean;
+  paidModels: boolean;
+  features: string[];
+};
+
+export type Subscription = {
+  address: string;
+  plan: Tier;
+  cycle: Cycle | null;
+  since: number;
+  expires: number | null;
+  txHash: string | null;
+};
+
+export async function fetchPlans(address?: string): Promise<{
+  tiers: TierSpec[];
+  treasury: string;
+  token: string;
+  subscription: Subscription | null;
+} | null> {
+  const res = await fetch(`/api/plans${address ? `?address=${address}` : ""}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+/** Hands the payment hash over. The grant is decided by reading it on chain. */
+export async function redeemPlan(
+  address: string,
+  txHash: string,
+  tier: Tier,
+  cycle: Cycle,
+): Promise<string | null> {
+  const res = await fetch("/api/plans/redeem", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ address, txHash, tier, cycle }),
+  });
+  if (res.ok) return null;
+  return ((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Could not confirm the payment";
+}
+
 export type BotKind = "standard" | "ai";
 
 export type Bot = {
@@ -150,7 +202,7 @@ export type Bot = {
   keyAddress: string | null;
 };
 
-export type Plan = { address: string; plan: "free" | "pro"; since: number; expires: number | null };
+export type Plan = Subscription;
 export type BotLimits = {
   maxBots: number;
   proPrice: number;

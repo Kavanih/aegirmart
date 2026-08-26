@@ -9,6 +9,7 @@ import { predict, quotaBlockedFor, freeModels } from "./openrouter.js";
 import { TtlCache, RateLimiter } from "./cache.js";
 import { botsFor, createBot, updateBot, deleteBot, setBotKey, clearBotKey, planFor, MAX_BOTS, PRO_PRICE, ASSETS, KINDS } from "./bots.js";
 import { keyStorageReady } from "./keys.js";
+import { TIERS, TREASURY, COLLATERAL, redeem, subscriptionFor, priceOf, type Tier, type Cycle } from "./plans.js";
 import { startRunner } from "./runner.js";
 import { claimLiveSpend, budgetStatus } from "./budget.js";
 import type { PredictionResult } from "./openrouter.js";
@@ -311,6 +312,44 @@ function requireAddress(raw: unknown, res: express.Response): string | null {
   }
   return address;
 }
+
+/** The pricing table, and where a payment has to go. */
+app.get("/api/plans", (req, res) => {
+  const address = String(req.query.address ?? "").toLowerCase();
+  res.json({
+    tiers: TIERS,
+    treasury: TREASURY,
+    token: COLLATERAL,
+    subscription: ADDRESS.test(address) ? subscriptionFor(address) : null,
+  });
+});
+
+/**
+ * Turn a paid transaction into a plan. The hash is the only thing the client
+ * supplies that matters; everything else is read back off the chain.
+ */
+app.post("/api/plans/redeem", async (req, res) => {
+  const address = requireAddress(req.body?.address, res);
+  if (!address) return;
+
+  const tier = String(req.body?.tier ?? "") as Tier;
+  const cycle = String(req.body?.cycle ?? "monthly") as Cycle;
+  if (!TIERS.some((t) => t.id === tier)) {
+    res.status(400).json({ error: "Unknown plan" });
+    return;
+  }
+  if (cycle !== "monthly" && cycle !== "yearly") {
+    res.status(400).json({ error: "Unknown billing cycle" });
+    return;
+  }
+
+  const result = await redeem(address, String(req.body?.txHash ?? ""), tier, cycle);
+  if ("error" in result) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json({ ...result, price: priceOf(tier, cycle) });
+});
 
 app.get("/api/bots", (req, res) => {
   const address = requireAddress(req.query.address, res);
