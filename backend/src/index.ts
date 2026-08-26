@@ -10,7 +10,7 @@ import { TtlCache, RateLimiter } from "./cache.js";
 import { botsFor, createBot, updateBot, deleteBot, setBotKey, clearBotKey, planFor, botMarketsFor, MAX_BOTS, PRO_PRICE, ASSETS, KINDS } from "./bots.js";
 import { keyStorageReady } from "./keys.js";
 import { pricedPositionsFor, summarise } from "./positions.js";
-import { TIERS, TREASURY, COLLATERAL, redeem, subscriptionFor, priceOf, type Tier, type Cycle } from "./plans.js";
+import { TIERS, TREASURY, COLLATERAL, redeem, subscriptionFor, priceOf, tierSpec, type Tier, type Cycle } from "./plans.js";
 import { startRunner } from "./runner.js";
 import { claimLiveSpend, budgetStatus } from "./budget.js";
 import type { PredictionResult } from "./openrouter.js";
@@ -312,7 +312,16 @@ app.get("/api/bots", (req, res) => {
   res.json({
     bots: botsFor(address),
     plan: planFor(address),
-    limits: { maxBots: MAX_BOTS, proPrice: PRO_PRICE, assets: ASSETS, kinds: KINDS, keyStorage: keyStorageReady() },
+    limits: {
+      // From the caller's own tier, not a constant, so the UI states the
+      // ceiling that will actually be enforced.
+      maxBots: tierSpec(planFor(address).plan).maxBots,
+      maxRunning: tierSpec(planFor(address).plan).maxRunning,
+      proPrice: PRO_PRICE,
+      assets: ASSETS,
+      kinds: KINDS,
+      keyStorage: keyStorageReady(),
+    },
   });
 });
 

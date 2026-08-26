@@ -178,7 +178,7 @@ export type BotDraft = Partial<Pick<Bot, "name" | "kind" | "asset" | "stake" | "
 
 type BotFields = Pick<Bot, "name" | "kind" | "asset" | "stake" | "dailyTrades" | "spread" | "model" | "status">;
 
-function clean(draft: BotDraft, plan: Plan, current?: Bot): { bot: BotFields } | { error: string } {
+function clean(draft: BotDraft, plan: Plan, address: string, current?: Bot): { bot: BotFields } | { error: string } {
   const kind = draft.kind ?? current?.kind ?? "standard";
   if (!KINDS.includes(kind)) return { error: "kind must be standard or ai" };
   const spec = tierSpec(plan.plan);
@@ -210,6 +210,17 @@ function clean(draft: BotDraft, plan: Plan, current?: Bot): { bot: BotFields } |
   const status = draft.status ?? current?.status ?? "paused";
   if (status !== "running" && status !== "paused") return { error: "status must be running or paused" };
 
+  // Saved and running are separate ceilings: a wallet may keep a shelf of
+  // strategies and switch between them, but only run a few at once.
+  if (status === "running" && current?.status !== "running") {
+    const live = Object.values(bots).filter(
+      (b) => b.address === address && b.status === "running" && b.id !== current?.id,
+    ).length;
+    if (live >= spec.maxRunning) {
+      return { error: `The ${spec.name} plan runs ${spec.maxRunning} bot${spec.maxRunning === 1 ? "" : "s"} at once. Pause one first.` };
+    }
+  }
+
   // A standard bot has no model to name; storing one would imply it uses it.
   const model = kind === "ai" ? (draft.model ?? current?.model ?? null) : null;
 
@@ -218,9 +229,13 @@ function clean(draft: BotDraft, plan: Plan, current?: Bot): { bot: BotFields } |
 
 export function createBot(addressRaw: string, draft: BotDraft): { bot: PublicBot } | { error: string } {
   const address = addressRaw.toLowerCase();
-  if (botsFor(address).length >= MAX_BOTS) return { error: `A wallet can hold ${MAX_BOTS} bots for now` };
+  const plan = planFor(address);
+  const spec = tierSpec(plan.plan);
+  if (botsFor(address).length >= spec.maxBots) {
+    return { error: `The ${spec.name} plan holds ${spec.maxBots} bots` };
+  }
 
-  const checked = clean(draft, planFor(address));
+  const checked = clean(draft, plan, address);
   if ("error" in checked) return checked;
 
   const now = Date.now();
@@ -239,7 +254,7 @@ export function updateBot(addressRaw: string, id: string, draft: BotDraft): { bo
   const current = bots[id];
   if (!current || current.address !== address) return { error: "bot not found" };
 
-  const checked = clean(draft, planFor(address), current);
+  const checked = clean(draft, planFor(address), address, current);
   if ("error" in checked) return checked;
 
   const bot: Bot = { ...current, ...checked.bot, updatedAt: Date.now() };

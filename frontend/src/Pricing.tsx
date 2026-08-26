@@ -116,14 +116,16 @@ export function Pricing() {
 
                 <p className="tier-tagline">{tier.tagline}</p>
 
-                <p className="tier-price">
-                  <span className="tier-amount">${price}</span>
-                  <span className="tier-cycle">/ {cycle === "yearly" ? "year" : "month"}</span>
-                </p>
-                {/* Only worth stating where there is actually a saving. */}
-                {cycle === "yearly" && tier.yearlyDiscount > 0 && (
-                  <p className="tier-save">{tier.yearlyDiscount}% off twelve months at ${tier.monthly}</p>
-                )}
+                <div className="tier-price-block">
+                  <p className="tier-price">
+                    <span className="tier-amount">${price}</span>
+                    <span className="tier-cycle">/ {cycle === "yearly" ? "year" : "month"}</span>
+                  </p>
+                  {/* Only worth stating where there is actually a saving. */}
+                  {cycle === "yearly" && tier.yearlyDiscount > 0 && (
+                    <p className="tier-save">{tier.yearlyDiscount}% off twelve months at ${tier.monthly}</p>
+                  )}
+                </div>
 
                 {active ? (
                   <button className="tier-cta current" disabled>Your current plan</button>
@@ -138,6 +140,12 @@ export function Pricing() {
                     {busy === tier.id ? "Confirming…" : `Upgrade to ${tier.name}`}
                   </button>
                 )}
+
+                <p className="tier-note">
+                  {tier.id === "free"
+                    ? "No payment, no expiry"
+                    : `${cycle === "yearly" ? "Billed once for twelve months" : "Billed monthly"} · renewing early extends the term`}
+                </p>
 
                 <ul className="tier-features">
                   {tier.features.map((f) => (

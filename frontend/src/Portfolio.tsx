@@ -388,11 +388,11 @@ export function Portfolio() {
                       }`}
                       title={
                         position.minted
-                          ? "Minted set: the opposite leg offsets this one, so the pair nets to nothing"
+                          ? "Both legs of this market were held, so one paid what the other cost. Nothing was won or lost."
                           : undefined
                       }
                     >
-                      {position.minted ? "Set" : outcome === "won" ? "Won" : outcome === "lost" ? "Lost" : "Open"}
+                      {position.minted ? "Even" : outcome === "won" ? "Won" : outcome === "lost" ? "Lost" : "Open"}
                     </td>
                     {tab === "History" && <td className="num muted-cell">{stamp(position.expiry)}</td>}
                     <td className="num">
@@ -411,6 +411,14 @@ export function Portfolio() {
           </table>
           </TableScroll>
         )
+      )}
+
+      {filtered.some((p) => p.minted) && (
+        <p className="footnote">
+          <strong>Even</strong> means both sides of that market were held at once. A bot mints a pair by putting up the
+          collateral, so one leg pays back exactly what the pair cost and the other expires. There is still a claim to
+          make on the leg that paid.
+        </p>
       )}
     </div>
   );

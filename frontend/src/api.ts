@@ -221,6 +221,8 @@ export async function fetchBotActivity(address: string, id: string): Promise<{
 export type Plan = Subscription;
 export type BotLimits = {
   maxBots: number;
+  /** How many of those may run at once on the current plan. */
+  maxRunning: number;
   proPrice: number;
   assets: string[];
   kinds: string[];

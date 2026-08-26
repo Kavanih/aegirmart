@@ -35,6 +35,10 @@ export type TierSpec = {
   yearlyDiscount: number;
   /** Ceiling on a bot's daily orders under this tier. Zero means unlimited. */
   dailyTrades: number;
+  /** Definitions a wallet may hold on this tier. */
+  maxBots: number;
+  /** How many of those may be running at once. */
+  maxRunning: number;
   aiBots: boolean;
   paidModels: boolean;
   features: string[];
@@ -49,9 +53,12 @@ export const TIERS: TierSpec[] = [
     yearly: 0,
     yearlyDiscount: 0,
     dailyTrades: 0,
+    maxBots: 3,
+    maxRunning: 1,
     aiBots: false,
     paidModels: false,
     features: [
+      "Three bots saved, one running at a time",
       "Standard bots that quote around the book",
       "Model reads on demand, one contract at a time",
       "Full market history and settled results",
@@ -66,10 +73,13 @@ export const TIERS: TierSpec[] = [
     yearly: 162,
     yearlyDiscount: 10,
     dailyTrades: 50,
+    maxBots: 10,
+    maxRunning: 3,
     aiBots: true,
     paidModels: false,
     features: [
       "Everything in Free",
+      "Ten bots saved, three running at once",
       "AI bots priced from a model read",
       "50 bot trades a day",
       "Free models, ranked by settled accuracy",
@@ -84,14 +94,16 @@ export const TIERS: TierSpec[] = [
     yearly: 306,
     yearlyDiscount: 15,
     dailyTrades: 0,
+    maxBots: 10,
+    maxRunning: 5,
     aiBots: true,
     paidModels: true,
     features: [
       "Everything in Starter",
+      "Ten bots saved, five running at once",
       "No daily trade ceiling",
       "Paid frontier models, once integrated",
       "Priority on the model queue",
-      "Every bot slot unlocked",
     ],
   },
 ];

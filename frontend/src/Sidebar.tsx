@@ -81,7 +81,7 @@ export function Sidebar({ view, onSelect }: Props) {
 
       <div className="sidebar-foot">
         <p className="sidebar-note">
-          Somnia testnet. Model estimates have no verified track record. Market price is the real odd.
+           AEGIR-MART V2.1.9 Somnia Testnet - AI Odds Prediction Engine
         </p>
       </div>
     </aside>
