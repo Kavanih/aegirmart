@@ -330,6 +330,7 @@ export type MarketDetail = {
   series: PricePoint[];
   trades: MarketTrade[];
   holdings: Holding[];
+  myOrders: OrderRow[];
   read: MarketRead | null;
 };
 

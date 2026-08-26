@@ -856,7 +856,7 @@ button.logo:hover .wordmark span { color: var(--text); }
 .key-line.target { border-top-style: dashed; }
 .key-line.spot { color: var(--up); }
 
-.outcomes h3, .detail-read h3, .detail-prints h3 { font-size: 13px; margin: 0 0 10px; font-weight: 650; }
+.outcomes h3, .detail-read h3, .detail-orders h3, .detail-prints h3 { font-size: 13px; margin: 0 0 10px; font-weight: 650; }
 .outcome-row { display: flex; align-items: center; gap: 18px; padding: 15px 16px; margin-bottom: 9px;
   flex-wrap: wrap;
   border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }

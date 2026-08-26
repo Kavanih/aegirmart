@@ -247,6 +247,13 @@ app.get("/api/market/:marketId", async (req, res) => {
     // What the caller already holds here, so the ticket can say whether this
     // adds to a position or opens one.
     const holder = String(req.query.address ?? "").toLowerCase();
+    // Orders this caller has resting here. A limit order that has not filled
+    // leaves no position and no trade, so without this the page that placed it
+    // shows no sign of it at all.
+    const myOrders = ADDRESS.test(holder)
+      ? (await ordersFor(holder, 60).catch(() => [])).filter((o) => o.marketId === marketId)
+      : [];
+
     const holdings = ADDRESS.test(holder)
       ? (await pricedPositionsFor(holder).catch(() => []))
           .filter((p) => p.marketId === marketId)
@@ -258,6 +265,7 @@ app.get("/api/market/:marketId", async (req, res) => {
       series,
       trades,
       holdings,
+      myOrders,
       read: read && {
         probability: read.probability,
         side: read.side,

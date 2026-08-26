@@ -43,6 +43,12 @@ export function useTrade() {
       stake: number,
       modelProbability: number | null = null,
       onPhase: OnPhase = ignore,
+      /**
+       * Price this exact order, rather than deriving one. A caller that shows
+       * the operator a price must place at that price: deriving it separately
+       * meant the ticket displayed one number and the order carried another.
+       */
+      limitPrice?: number,
     ) => {
       const fail = (message: string) => {
         setState({ phase: "error", message });
@@ -52,7 +58,12 @@ export function useTrade() {
       if (!address) return fail("Connect a wallet first");
       if (chainId !== somniaTestnet.id) return fail("Switch to Somnia testnet");
 
-      const plan = planOrder(market, direction, stake, bidPrice(direction, modelProbability));
+      const plan = planOrder(
+        market,
+        direction,
+        stake,
+        limitPrice ?? bidPrice(direction, modelProbability),
+      );
       if (!plan) return fail("Window closed before the order could be built");
 
       try {

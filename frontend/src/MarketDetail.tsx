@@ -120,7 +120,14 @@ export function MarketDetail({ marketId, onBack }: Props) {
     if (!isConnected) return toast.push("error", "Connect a wallet first");
     if (stake <= 0) return toast.push("error", "Enter an amount first");
 
-    const id = toast.push("pending", `Placing ${side === "up" ? "UP" : "DOWN"} on ${title(market)}`);
+    if (ticketPrice === null) return toast.push("error", "No price to work with on this side yet");
+
+    const id = toast.push(
+      "pending",
+      `Placing ${side === "up" ? "UP" : "DOWN"} on ${title(market)} at ${Math.round(ticketPrice * 100)}c`,
+    );
+    // The same price the ticket just showed, so the order cannot differ from
+    // what was agreed to on screen.
     void place(market, side, stake, modelUp, (phase, detail) => {
       if (phase === "approving") toast.update(id, "pending", "Approving tUSDC for this pool");
       else if (phase === "placing") toast.update(id, "pending", "Waiting for your signature");
@@ -130,7 +137,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
         const [hash, shares, price, dir] = detail.split("|");
         toast.update(id, "success", `Resting ${shares} ${dir === "up" ? "UP" : "DOWN"} at ${price}c. It fills only if someone crosses it.`, `${EXPLORER}/${hash}`);
       }
-    });
+    }, ticketPrice);
   };
 
   return (
@@ -254,6 +261,45 @@ export function MarketDetail({ marketId, onBack }: Props) {
                 </span>
               )}
             </p>
+          </section>
+        )}
+
+        {data.myOrders.length > 0 && (
+          <section className="detail-orders">
+            <h3>Your orders here</h3>
+            <p className="section-hint">
+              A limit order rests until someone crosses it. Until then it holds your collateral and shows no position.
+            </p>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Side</th>
+                  <th className="num">Price</th>
+                  <th className="num">Size</th>
+                  <th className="num">Filled</th>
+                  <th className="num">Escrow</th>
+                  <th className="num">Status</th>
+                  <th className="num">Placed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.myOrders.map((o) => (
+                  <tr key={o.orderId}>
+                    <td>
+                      <span className={`pos-side ${o.outcomeIndex === 0 ? "up" : "down"}`}>
+                        {o.outcomeIndex === 0 ? "UP" : "DOWN"}
+                      </span>
+                    </td>
+                    <td className="num">{Math.round(o.price * 100)}c</td>
+                    <td className="num">{o.quantity.toFixed(2)}</td>
+                    <td className={`num ${o.filled === 0 ? "muted-cell" : ""}`}>{o.filled.toFixed(2)}</td>
+                    <td className="num muted-cell">{(o.remaining * o.price).toFixed(2)}</td>
+                    <td className={`num order-status ${o.status.toLowerCase()}`}>{o.status}</td>
+                    <td className="num muted-cell">{stamp(o.placedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </section>
         )}
 
