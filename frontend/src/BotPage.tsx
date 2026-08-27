@@ -88,8 +88,13 @@ export function BotPage() {
     );
   }
 
-  const isPro = plan?.plan === "pro";
+  // Starter is a paid tier too. Testing only for "pro" showed a paying
+  // Starter account a Free badge and an upsell for what it had already bought.
+  const tier = plan?.plan ?? "free";
+  const paid = tier !== "free";
+  const tierName = tier === "pro" ? "Pro" : tier === "starter" ? "Starter" : "Free plan";
   const atLimit = Boolean(bots && limits && bots.length >= limits.maxBots);
+  const running = (bots ?? []).filter((b) => b.status === "running").length;
 
   return (
     <div className="page">
@@ -102,8 +107,8 @@ export function BotPage() {
         </div>
 
         <div className="bot-head-actions">
-          <span className={isPro ? "plan-pill pro" : "plan-pill"}>
-            {isPro ? <><FaCrown /> Pro</> : "Free plan"}
+          <span className={paid ? "plan-pill pro" : "plan-pill"}>
+            {paid ? <><FaCrown /> {tierName}</> : tierName}
           </span>
           <button
             className="cta"
@@ -119,7 +124,7 @@ export function BotPage() {
         </div>
       </div>
 
-      {!isPro && (
+      {!paid && (
         <div className="pro-banner">
           <FaCrown className="pro-mark" aria-hidden="true" />
           <div>
@@ -208,14 +213,6 @@ export function BotPage() {
         </div>
       )}
 
-      {bots && limits && (
-        <p className="footnote">
-          {bots.length} of {limits.maxBots} bots used. A stored key is encrypted at rest, but the server decrypts it to
-          sign, so a bot's key is a hot wallet: fund it with what that bot should risk. Running is still a flag on the
-          config — nothing executes until the runner is wired to these definitions.
-        </p>
-      )}
-
       {open && plan && limits && (
         <BotForm
           address={address}
@@ -229,6 +226,14 @@ export function BotPage() {
             load();
           }}
         />
+      )}
+
+      {bots && limits && (
+        <p className="footnote page-foot">
+          {bots.length} of {limits.maxBots} bots used, {running} of {limits.maxRunning} running. A running bot places
+          real orders with its stored key. That key is encrypted at rest, but the server decrypts it to sign, so treat
+          it as a hot wallet and fund it with what that bot should risk.
+        </p>
       )}
     </div>
   );

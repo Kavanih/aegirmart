@@ -1230,3 +1230,6 @@ button.logo:hover .wordmark span { color: var(--text); }
 .ask-model:disabled { opacity: 0.45; cursor: default; border-color: var(--line); color: var(--muted); }
 
 .payout-depth { display: block; margin-top: 4px; font-size: 10.5px; color: var(--conf-medium); line-height: 1.45; }
+
+/* Sits at the foot of a page, clear of the content above it. */
+.footnote.page-foot { margin-top: 26px; padding-top: 16px; border-top: 1px solid var(--line); }
