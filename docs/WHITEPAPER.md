@@ -221,7 +221,49 @@ Models are free-tier and ranked by their own settled record. A window with no
 stored read is skipped rather than triggering a read on a timer — reads are a
 scarce resource, and section 7 explains how scarce.
 
-### 5.4 What a directional bot actually trades
+### 5.4 Three things that are not edge
+
+The first live sessions lost money in a way that looked like bad luck and was
+not. Seven of thirteen settled trades came from a read where the model had
+answered **0.50** — "spot equals strike; digital and historical estimates both
+50%" — and every one of those seven lost.
+
+Nothing was wrong with the model. It was reporting honestly that it had no
+view. The error was on our side: `0.50` was fed into the edge test as a *fair
+value*, and a fair value of 0.50 manufactures enormous edge against any cheap
+price. The bot was sizing up on the absence of a signal.
+
+Two related mistakes came out of the same review.
+
+**A collapsing price is information, not a bargain.** A leg offered at 2c with
+ninety seconds left is not mispriced — spot has left the strike behind and the
+book knows. A read taken minutes earlier cannot see that, so the huge gap it
+opens is evidence the read is stale, not evidence of a mispricing.
+
+**A read expires with the price it described.** Reads were being acted on more
+than 200 seconds into a 300 second window.
+
+Three guards follow, and all three are properties of the *read*, not the market:
+
+| Guard | Rule | Reasoning |
+|---|---|---|
+| No view | require `abs(p - 0.5) >= 0.05` | 0.50 is an answer of "I don't know" |
+| Staleness | read age `<= interval / 3` | a snapshot stops describing a moving price |
+| Max edge | reject disagreement `> 0.35` | the book is better informed than a stale read |
+
+Replayed against the settled record, the guards block eight trades worth
+**−217.82** and keep five worth **+123.29**, blocking no winner. That is a
+retrospective check on thirteen trades and is not offered as proof. The
+mechanism does not depend on it: a 0.50 read carries no information by
+construction, whatever the sample says.
+
+The general lesson is worth stating separately, because it is not specific to
+this venue. **A model's uncertainty and a market's error produce identical
+arithmetic.** Both appear as a large gap between a model's number and a price.
+Only one of them is worth betting on, and telling them apart requires asking
+whether the model actually said anything — which a subtraction cannot do.
+
+### 5.5 What a directional bot actually trades
 
 This is the most commonly misunderstood part of the system, so it is stated
 explicitly.
@@ -242,7 +284,7 @@ outright.
 A consequence that surprises people: the bot will buy the side its own model
 thinks is *less* likely, when the other side is overpriced enough. That is
 value betting and it is correct by expectation. It is also the behaviour that
-motivated the conviction floor in the next section.
+motivated the conviction floor in section 6.
 
 ---
 
@@ -288,9 +330,10 @@ What can be said from first principles:
 - On five-minute crypto, true probabilities cluster near 50%. A floor above
   roughly 60% approaches "never trade", not "trade selectively".
 
-### 6.3 Recommendation
+### 6.3 Recommendation, and what shipped
 
-**Keep the control; default it off.**
+**Keep the control; default it off.** This is what shipped: new bots carry no
+floor, and raising it is a deliberate act.
 
 It is a legitimate risk-appetite setting and operators should have it. But it is
 not an accuracy filter, and defaulting it to 50% silently rejects about half of
