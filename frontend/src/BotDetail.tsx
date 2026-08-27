@@ -112,11 +112,19 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
         />
         <Stat label="Settled" value={stats ? String(stats.settled) : "--"} />
         <Stat label="Trades today" value={capped ? `${bot.tradesToday}/${bot.dailyTrades}` : String(bot.tradesToday)} />
-        <Stat
-          label="Allowance left"
-          value={left === null ? "no cap" : String(left)}
-          tone={left !== null && left === 0 ? "bad" : undefined}
-        />
+        {bot.kind === "ai" ? (
+          <Stat
+            label="Reads today"
+            value={`${bot.readsToday}/${bot.dailyReads}`}
+            tone={bot.dailyReads > 0 && bot.readsToday >= bot.dailyReads ? "bad" : undefined}
+          />
+        ) : (
+          <Stat
+            label="Allowance left"
+            value={left === null ? "no cap" : String(left)}
+            tone={left !== null && left === 0 ? "bad" : undefined}
+          />
+        )}
       </div>
 
       <div className="stat-grid">
@@ -145,7 +153,8 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
       {bot.kind === "ai" && (
         <p className="footnote">
           <FaBrain aria-hidden="true" /> Prices from {bot.model ? bot.model.replace(/:free$/, "") : "the best available model"}.
-          A window with no stored read is skipped rather than asking the model on a timer.
+          A window is only read while this bot is running and still has reads left, so switching it off is what
+          saves the allowance. A window with no stored read is skipped rather than guessed at.
         </p>
       )}
 

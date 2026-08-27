@@ -35,6 +35,14 @@ export type TierSpec = {
   yearlyDiscount: number;
   /** Ceiling on a bot's daily orders under this tier. Zero means unlimited. */
   dailyTrades: number;
+  /**
+   * Ceiling on model reads an AI bot may spend in a day.
+   *
+   * A read is the scarce resource, not a trade: an AI bot cannot act on a
+   * window it has not read, and reads come from a fixed daily allowance. This
+   * is what an AI bot is actually budgeted on.
+   */
+  dailyReads: number;
   /** Definitions a wallet may hold on this tier. */
   maxBots: number;
   /** How many of those may be running at once. */
@@ -55,6 +63,7 @@ export const TIERS: TierSpec[] = [
     yearly: 0,
     yearlyDiscount: 0,
     dailyTrades: 0,
+    dailyReads: 0,
     maxBots: 3,
     maxRunning: 1,
     strategyBots: false,
@@ -76,6 +85,7 @@ export const TIERS: TierSpec[] = [
     yearly: 162,
     yearlyDiscount: 10,
     dailyTrades: 50,
+    dailyReads: 20,
     maxBots: 10,
     maxRunning: 3,
     strategyBots: true,
@@ -87,6 +97,7 @@ export const TIERS: TierSpec[] = [
       "Quant bots that back one side on the maths",
       "AI bots that back one side on a model read",
       "50 bot trades a day",
+      "20 AI model reads a day",
       "Free models, ranked by settled accuracy",
       "Pick which model runs each bot",
     ],
@@ -99,6 +110,7 @@ export const TIERS: TierSpec[] = [
     yearly: 306,
     yearlyDiscount: 15,
     dailyTrades: 0,
+    dailyReads: 50,
     maxBots: 10,
     maxRunning: 5,
     strategyBots: true,
@@ -108,6 +120,7 @@ export const TIERS: TierSpec[] = [
       "Everything in Starter",
       "Ten bots saved, five running at once",
       "No daily trade ceiling",
+      "50 AI model reads a day",
       "Paid frontier models, once integrated",
       "Priority on the model queue",
     ],

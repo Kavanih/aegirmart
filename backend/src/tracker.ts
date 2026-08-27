@@ -3,6 +3,7 @@ import { liveMarkets, settledOutcomes, type Market } from "./markets.js";
 import { buildEvidence } from "./quant.js";
 import { predict, quotaBlockedFor } from "./openrouter.js";
 import { claimTrackerSpend, budgetStatus } from "./budget.js";
+import { runningBots, claimBotRead, AI_MIN_INTERVAL } from "./bots.js";
 
 const STORE = new URL("../predictions.json", import.meta.url).pathname;
 const MAX_RECORDS = 100;
@@ -228,6 +229,15 @@ export function startTracker(apiKey: string): void {
         return;
       }
 
+      // Nothing is read speculatively any more. A read is only worth its cost
+      // if some switched-on bot can act on it, so the running AI bots decide
+      // what gets read and pay for it out of their own daily allowance.
+      const readers = runningBots().filter((b) => b.kind === "ai");
+      if (readers.length === 0) {
+        await scorePending().catch(() => undefined);
+        return;
+      }
+
       const markets = (await Promise.all(LANES.map((lane) => liveMarkets(lane, 5)))).flat();
       const fresh = markets
         .filter((m) => !records.some((r) => r.marketId === m.marketId) && !inFlight.has(m.marketId) && mayAttempt(m.marketId))
@@ -238,8 +248,15 @@ export function startTracker(apiKey: string): void {
       // Concurrent across markets, so one slow model does not block the others.
       await Promise.all(
         fresh.map(async (market) => {
-          // Paced against the day's allowance so the first minutes of uptime
-          // cannot consume every request a person might swipe for later.
+          // Whoever wants this window pays for it. A bot out of allowance is
+          // not a reader, so its markets simply go uncovered.
+          const owner = readers.find(
+            (b) =>
+              (b.asset === "BOTH" || b.asset === market.asset) &&
+              market.intervalSec >= AI_MIN_INTERVAL &&
+              claimBotRead(b.id),
+          );
+          if (!owner) return;
           if (!claimTrackerSpend()) return;
           inFlight.add(market.marketId);
           noteAttempt(market.marketId);
@@ -264,6 +281,6 @@ export function startTracker(apiKey: string): void {
   const { limit, remaining } = budgetStatus();
   console.log(
     `tracker running on the ${LANES.join(", ")}s lane${LANES.length > 1 ? "s" : ""}, ` +
-      `polling every ${POLL_MS / 1000}s, ${remaining}/${limit} free requests left today`,
+      `reading only for running AI bots, ${remaining}/${limit} free requests left today`,
   );
 }

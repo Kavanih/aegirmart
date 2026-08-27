@@ -219,6 +219,9 @@ export type Bot = {
   spread: number;
   /** Floor on the chance of winning before a directional bot acts. */
   minProbability: number;
+  /** Model reads this bot may spend in a day. AI bots only. */
+  dailyReads: number;
+  readsToday: number;
   model: string | null;
   status: "running" | "paused";
   createdAt: number;
@@ -258,6 +261,8 @@ export type BotLimits = {
   maxBots: number;
   /** How many of those may run at once on the current plan. */
   maxRunning: number;
+  /** Model reads an AI bot may spend a day on the current plan. */
+  dailyReads: number;
   proPrice: number;
   assets: string[];
   kinds: string[];
@@ -265,7 +270,10 @@ export type BotLimits = {
   keyStorage: boolean;
 };
 export type BotDraft = Partial<
-  Pick<Bot, "name" | "kind" | "asset" | "stake" | "dailyTrades" | "spread" | "minProbability" | "model" | "status">
+  Pick<
+    Bot,
+    "name" | "kind" | "asset" | "stake" | "dailyTrades" | "dailyReads" | "spread" | "minProbability" | "model" | "status"
+  >
 >;
 
 export async function fetchBots(address: string): Promise<{ bots: Bot[]; plan: Plan; limits: BotLimits } | null> {

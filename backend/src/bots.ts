@@ -53,6 +53,12 @@ export type Bot = {
   /** Orders placed today, against the daily cap. Rolls on the UTC date. */
   tradesToday: number;
   tradeDay: string;
+  /**
+   * Model reads this bot may spend in a day. AI bots only, and the real budget
+   * for one: it cannot trade a window it has not read.
+   */
+  dailyReads: number;
+  readsToday: number;
   /** Markets this bot has quoted, so the owner's profile can exclude them. */
   markets?: string[];
 };
@@ -84,6 +90,8 @@ let bots: Record<string, Bot> = load<Bot>(BOTS);
 // floor would read as set on the card and do nothing in the runner.
 for (const bot of Object.values(bots)) {
   if (typeof bot.minProbability !== "number") bot.minProbability = 0.5;
+  if (typeof bot.dailyReads !== "number") bot.dailyReads = bot.kind === "ai" ? 10 : 0;
+  if (typeof bot.readsToday !== "number") bot.readsToday = 0;
 }
 let plans: Record<string, Plan> = load<Plan>(PLANS);
 
@@ -111,6 +119,7 @@ export function runningBots(): Bot[] {
       // and the count it read both belonged to an object nothing persisted.
       if (b.tradeDay !== day) {
         b.tradesToday = 0;
+        b.readsToday = 0;
         b.tradeDay = day;
       }
       return b;
@@ -124,6 +133,28 @@ export function runningBots(): Bot[] {
 export function openBotKey(id: string): string | null {
   const bot = bots[id];
   return bot?.key ? openSealed(bot.key) : null;
+}
+
+/**
+ * Charge one model read to a bot, if it has the allowance for it.
+ *
+ * The operator now controls model spend by switching bots on and off, so the
+ * allowance has to be checked where the read is about to happen rather than
+ * paced centrally.
+ */
+export function claimBotRead(id: string): boolean {
+  const bot = bots[id];
+  if (!bot) return false;
+  const day = utcDay();
+  if (bot.tradeDay !== day) {
+    bot.tradesToday = 0;
+    bot.readsToday = 0;
+    bot.tradeDay = day;
+  }
+  if (bot.dailyReads > 0 && bot.readsToday >= bot.dailyReads) return false;
+  bot.readsToday += 1;
+  persist();
+  return true;
 }
 
 export function recordBotFill(id: string, marketId?: string): void {
@@ -202,10 +233,16 @@ export function clearBotKey(addressRaw: string, id: string): boolean {
 }
 
 export type BotDraft = Partial<
-  Pick<Bot, "name" | "kind" | "asset" | "stake" | "dailyTrades" | "spread" | "minProbability" | "model" | "status">
+  Pick<
+    Bot,
+    "name" | "kind" | "asset" | "stake" | "dailyTrades" | "dailyReads" | "spread" | "minProbability" | "model" | "status"
+  >
 >;
 
-type BotFields = Pick<Bot, "name" | "kind" | "asset" | "stake" | "dailyTrades" | "spread" | "minProbability" | "model" | "status">;
+type BotFields = Pick<
+  Bot,
+  "name" | "kind" | "asset" | "stake" | "dailyTrades" | "dailyReads" | "spread" | "minProbability" | "model" | "status"
+>;
 
 function clean(draft: BotDraft, plan: Plan, address: string, current?: Bot): { bot: BotFields } | { error: string } {
   const kind = draft.kind ?? current?.kind ?? "standard";
@@ -233,6 +270,15 @@ function clean(draft: BotDraft, plan: Plan, address: string, current?: Bot): { b
     return { error: `The ${spec.name} plan allows ${spec.dailyTrades} trades a day` };
   }
 
+  // Reads are what an AI bot actually spends. Anything else has no use for
+  // them, so the field is fixed at zero rather than quietly carrying a value.
+  const wantedReads = Number(draft.dailyReads ?? current?.dailyReads ?? spec.dailyReads);
+  const dailyReads = kind === "ai" ? wantedReads : 0;
+  if (!Number.isFinite(dailyReads) || dailyReads < 0) return { error: "reads a day must be zero or more" };
+  if (kind === "ai" && spec.dailyReads > 0 && dailyReads > spec.dailyReads) {
+    return { error: `The ${spec.name} plan allows ${spec.dailyReads} model reads a day` };
+  }
+
   const spread = Number(draft.spread ?? current?.spread ?? 0.02);
   if (!Number.isFinite(spread) || spread <= 0 || spread >= 0.5) return { error: "spread must be between 0 and 0.5" };
 
@@ -258,7 +304,7 @@ function clean(draft: BotDraft, plan: Plan, address: string, current?: Bot): { b
   // Only an AI bot names a model; storing one elsewhere would imply it is used.
   const model = kind === "ai" ? (draft.model ?? current?.model ?? null) : null;
 
-  return { bot: { name, kind, asset, stake, dailyTrades, spread, minProbability, model, status } };
+  return { bot: { name, kind, asset, stake, dailyTrades, dailyReads, spread, minProbability, model, status } };
 }
 
 export function createBot(addressRaw: string, draft: BotDraft): { bot: PublicBot } | { error: string } {
@@ -276,7 +322,7 @@ export function createBot(addressRaw: string, draft: BotDraft): { bot: PublicBot
   const bot: Bot = {
     ...checked.bot,
     id: randomUUID(), address, createdAt: now, updatedAt: now,
-    tradesToday: 0, tradeDay: utcDay(),
+    tradesToday: 0, tradeDay: utcDay(), readsToday: 0,
   };
   bots[bot.id] = bot;
   persist();

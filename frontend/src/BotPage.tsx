@@ -182,7 +182,13 @@ export function BotPage() {
                 )}
                 <div>
                   <dt>Daily cap</dt>
-                  <dd>{bot.dailyTrades === 0 ? "no cap" : `${bot.dailyTrades} trades`}</dd>
+                  <dd>
+                    {bot.kind === "ai"
+                      ? `${bot.readsToday}/${bot.dailyReads} reads`
+                      : bot.dailyTrades === 0
+                        ? "no cap"
+                        : `${bot.dailyTrades} trades`}
+                  </dd>
                 </div>
                 {bot.kind !== "standard" && (
                   <div>
@@ -226,6 +232,7 @@ export function BotPage() {
           address={address}
           plan={plan}
           proPrice={limits.proPrice}
+          readCeiling={limits.dailyReads}
           keyStorage={limits.keyStorage}
           editing={editing}
           onClose={() => setOpen(false)}

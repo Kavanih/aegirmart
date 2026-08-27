@@ -5,6 +5,8 @@ import { fetchModels, saveBot, storeBotKey, type Bot, type BotDraft, type BotKin
 type Props = {
   address: string;
   plan: Plan;
+  /** Model reads an AI bot may spend a day on this plan. */
+  readCeiling: number;
   proPrice: number;
   editing: Bot | null;
   keyStorage: boolean;
@@ -43,12 +45,13 @@ async function latestBotId(address: string): Promise<string | null> {
   return bots.length ? bots[bots.length - 1].id : null;
 }
 
-export function BotForm({ address, plan, proPrice, editing, keyStorage, onClose, onSaved }: Props) {
+export function BotForm({ address, plan, readCeiling, proPrice, editing, keyStorage, onClose, onSaved }: Props) {
   const [name, setName] = useState(editing?.name ?? "");
   const [kind, setKind] = useState<BotKind>(editing?.kind ?? "standard");
   const [asset, setAsset] = useState<(typeof ASSETS)[number]>(editing?.asset ?? "BOTH");
   const [stake, setStake] = useState(String(editing?.stake ?? 5));
   const [dailyTrades, setDailyTrades] = useState(String(editing?.dailyTrades ?? 50));
+  const [dailyReads, setDailyReads] = useState(String(editing?.dailyReads ?? 10));
   const [spread, setSpread] = useState(String(Math.round((editing?.spread ?? 0.02) * 100)));
   const [minChance, setMinChance] = useState(String(Math.round((editing?.minProbability ?? 0.5) * 100)));
   const [model, setModel] = useState(editing?.model ?? "");
@@ -82,6 +85,7 @@ export function BotForm({ address, plan, proPrice, editing, keyStorage, onClose,
       asset,
       stake: Number(stake),
       dailyTrades: Number(dailyTrades),
+      dailyReads: Number(dailyReads),
       spread: Number(spread) / 100,
       minProbability: Number(minChance) / 100,
       model: kind === "ai" ? model || null : null,
@@ -170,13 +174,37 @@ export function BotForm({ address, plan, proPrice, editing, keyStorage, onClose,
         </div>
 
         <div className={kind === "standard" ? "field-row" : "field-row single"}>
-          <label className="field">
-            <span>Trades per day</span>
-            <div className="input-unit">
-              <input type="number" min="0" step="1" value={dailyTrades} onChange={(e) => setDailyTrades(e.target.value)} />
-              <span>max</span>
-            </div>
-          </label>
+          {/* An AI bot cannot trade a window it has not read, and reads come
+              from a fixed daily allowance. Reads are the budget that binds, so
+              that is what the operator sets. */}
+          {kind === "ai" ? (
+            <label className="field">
+              <span>Model reads per day</span>
+              <div className="input-unit">
+                <input
+                  type="number"
+                  min="0"
+                  max={readCeiling || undefined}
+                  step="1"
+                  value={dailyReads}
+                  onChange={(e) => setDailyReads(e.target.value)}
+                />
+                <span>reads</span>
+              </div>
+              <span className="field-note">
+                One read prices one five minute window. Your plan allows {readCeiling} a day across every AI bot.
+                The bot stops reading when its own share is spent, so switching it off is what saves the allowance.
+              </span>
+            </label>
+          ) : (
+            <label className="field">
+              <span>Trades per day</span>
+              <div className="input-unit">
+                <input type="number" min="0" step="1" value={dailyTrades} onChange={(e) => setDailyTrades(e.target.value)} />
+                <span>max</span>
+              </div>
+            </label>
+          )}
 
           {/* Only a market maker quotes two prices, so only it has a gap to
               set. A directional bot takes one side at one price. */}

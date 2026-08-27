@@ -10,8 +10,6 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
  */
 const STORE = new URL("../quota.json", import.meta.url).pathname;
 const DAILY_LIMIT = Number(process.env.FREE_DAILY_LIMIT ?? 50);
-// The rest is reserved for cards a person swipes before the tracker covers them.
-const TRACKER_SHARE = 0.6;
 
 type Ledger = { day: string; spent: number; blockedUntil?: number };
 
@@ -47,22 +45,19 @@ function persist(): void {
   }
 }
 
-/** Fraction of the UTC day elapsed, so spend is earned rather than granted. */
-function dayElapsed(): number {
-  const now = new Date();
-  const seconds = now.getUTCHours() * 3600 + now.getUTCMinutes() * 60 + now.getUTCSeconds();
-  return seconds / 86_400;
-}
-
 /**
- * True when the tracker may spend one request now. The tracker is held to a
- * share of the allowance AND to the pace of the day, so leaving the server up
- * overnight covers markets steadily instead of in one burst.
+ * True when the tracker may spend one request now.
+ *
+ * Nothing paces this any more. Spreading the allowance across the day meant a
+ * read every forty eight minutes, which is not coverage of a five minute
+ * window, and an operator watching a bot could not tell a paced-out tracker
+ * from a broken one. The throttle is now the operator: the tracker only reads
+ * for a bot that is switched on and still holds a daily read allowance, so
+ * turning a bot off stops the spend.
  */
 export function claimTrackerSpend(): boolean {
   const l = current();
-  const earned = Math.ceil(DAILY_LIMIT * TRACKER_SHARE * dayElapsed());
-  if (l.spent >= earned || l.spent >= DAILY_LIMIT) return false;
+  if (l.spent >= DAILY_LIMIT) return false;
   l.spent += 1;
   persist();
   return true;

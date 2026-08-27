@@ -362,6 +362,7 @@ app.get("/api/bots", (req, res) => {
       // ceiling that will actually be enforced.
       maxBots: tierSpec(planFor(address).plan).maxBots,
       maxRunning: tierSpec(planFor(address).plan).maxRunning,
+      dailyReads: tierSpec(planFor(address).plan).dailyReads,
       proPrice: PRO_PRICE,
       assets: ASSETS,
       kinds: KINDS,
