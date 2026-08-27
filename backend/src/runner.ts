@@ -189,8 +189,11 @@ async function cycle(): Promise<void> {
           continue;
         }
 
+        // recordBotFill already counts the trade and persists it. Counting it
+        // again here billed every order twice against the daily allowance, and
+        // unevenly: the second increment landed after the write, so a restart
+        // dropped it and the total sat somewhere between real and double.
         recordBotFill(bot.id, market.marketId);
-        bot.tradesToday += 1;
         // Attribution by strategy, which the chain cannot give: several bots
         // may share one key and look like a single trader. A maker is recorded
         // too, so its trade count is right; only its win RATE is meaningless,

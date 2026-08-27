@@ -102,9 +102,19 @@ function utcDay(): string {
 
 /** Bots that are switched on AND hold a key, so the runner can act for them. */
 export function runningBots(): Bot[] {
+  const day = utcDay();
   return Object.values(bots)
     .filter((b) => b.status === "running" && b.key)
-    .map((b) => (b.tradeDay === utcDay() ? b : { ...b, tradesToday: 0, tradeDay: utcDay() }));
+    .map((b) => {
+      // Roll the day over ON the stored bot, not on a copy of it. Handing the
+      // runner a copy gave it a second, throwaway allowance: the cap it tested
+      // and the count it read both belonged to an object nothing persisted.
+      if (b.tradeDay !== day) {
+        b.tradesToday = 0;
+        b.tradeDay = day;
+      }
+      return b;
+    });
 }
 
 /**
