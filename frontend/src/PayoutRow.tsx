@@ -13,12 +13,14 @@ export function PayoutRow({ stake, price, probability, side }: Props) {
   if (!quote) return null;
 
   const ev = expectedValue(stake, price, probability);
-  const edge = ev === null ? null : ev / stake;
+  // Measured against what actually leaves the wallet, not the amount typed,
+  // since quantity floors to a whole lot.
+  const edge = ev === null || quote.escrow <= 0 ? null : ev / quote.escrow;
 
   return (
     <div className="payout-row">
       <span className="payout-main">
-        {fmt(stake)} to win <strong>{fmt(quote.payout)}</strong>
+        {fmt(quote.escrow)} to win <strong>{fmt(quote.payout)}</strong>
       </span>
       <span className="payout-sub">
         {fmt(quote.shares)} shares at {Math.round(price * 100)}c &middot; {fmt(quote.returnMultiple, 2)}x

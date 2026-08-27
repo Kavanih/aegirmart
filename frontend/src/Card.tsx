@@ -41,6 +41,14 @@ export function Card({ market, prediction, series, spot, swipe, now, depth, stak
 
   const drift = spot === null ? null : spot - market.strike;
 
+  // What this side would cost against the market, falling back to the price
+  // the swipe would rest at when nothing has traded.
+  const side = intent === "down" ? "down" : "up";
+  const marketSide = market_p === null ? null : side === "down" ? 1 - market_p : market_p;
+  const payPrice = marketSide !== null && marketSide > 0 && marketSide < 1
+    ? marketSide
+    : bidPrice(side, model_p);
+
   const style = {
     transform: `translate3d(${dx}px, ${dy + depth * 10}px, 0) rotate(${swipe?.rotation ?? 0}deg) scale(${
       isTop ? 1 : 1 - depth * 0.04 + (swipe?.leaving ? 0.04 : 0)
@@ -129,9 +137,12 @@ export function Card({ market, prediction, series, spot, swipe, now, depth, stak
         </div>
       )}
 
+      {/* Priced at what the market charges where there is a market, so the
+          edge readout compares the model against something other than itself.
+          With no book to pay, it falls back to the resting bid. */}
       <PayoutRow
         stake={stake}
-        price={intent === "down" ? bidPrice("down", model_p) : bidPrice("up", model_p)}
+        price={payPrice}
         probability={intent === "down" && model_p !== null ? 1 - model_p : model_p}
         side={intent === "down" ? "down" : "up"}
       />
