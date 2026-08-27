@@ -167,12 +167,12 @@ export function recordRead(
   persist();
 }
 
-async function predictMarket(market: Market, apiKey: string): Promise<void> {
+async function predictMarket(market: Market, apiKey: string, preferred?: string | null): Promise<void> {
   const evidence = await buildEvidence(market);
   // Leave a third of the window for the card to actually show the read.
   const remainingMs = (market.expiry - Math.floor(Date.now() / 1000)) * 1000;
   const budget = Math.max(8_000, Math.min(45_000, remainingMs * 0.6));
-  const result = await predict(evidence, apiKey, budget);
+  const result = await predict(evidence, apiKey, budget, preferred);
   if (result.status !== "ok") return;
 
   records.unshift({
@@ -261,7 +261,7 @@ export function startTracker(apiKey: string): void {
           inFlight.add(market.marketId);
           noteAttempt(market.marketId);
           try {
-            await predictMarket(market, apiKey);
+            await predictMarket(market, apiKey, owner.model);
           } catch {
             // Retried on a later tick; no record means not yet covered.
           } finally {

@@ -258,7 +258,13 @@ async function callModel(model: string, prompt: string, apiKey: string, timeoutM
 }
 
 // One retry on the primary, then the fallback model, then a degraded result.
-export async function predict(evidence: Evidence, apiKey: string, budgetMs = 45_000): Promise<PredictionResult> {
+export async function predict(
+  evidence: Evidence,
+  apiKey: string,
+  budgetMs = 45_000,
+  /** Model to try first. A bot that names one should be read by that one. */
+  preferred?: string | null,
+): Promise<PredictionResult> {
   if (quotaBlockedFor() > 0) return { status: "unavailable", reason: describeBlock() };
 
   const deadline = Date.now() + budgetMs;
@@ -270,6 +276,9 @@ export async function predict(evidence: Evidence, apiKey: string, budgetMs = 45_
   try {
     // Measured latency and reliability decide the order, not a static list.
     models = orderByPerformance(await freeModels()).slice(0, MAX_MODELS_PER_PREDICTION);
+    // The operator's choice leads; the ranked list stays behind it as fallback,
+    // so naming a model cannot leave a window unread when that model is down.
+    if (preferred) models = [preferred, ...models.filter((m) => m !== preferred)];
   } catch (err) {
     return { status: "unavailable", reason: (err as Error).message };
   }

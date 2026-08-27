@@ -22,6 +22,26 @@ const CYCLE_MS = Number(process.env.RUNNER_CYCLE_MS ?? 20_000);
 const LANES = [60, 300];
 /** How far a price must sit from fair before a directional bot will act. */
 const MIN_EDGE = Number(process.env.MIN_EDGE ?? 0.05);
+/**
+ * How far from a coin flip a read has to be before it counts as a view.
+ *
+ * A model answering 0.50 is saying it does not know. Treated as a fair value
+ * it manufactures enormous edge against any cheap price, and the bot then bets
+ * the maximum on the model's own ignorance. Measured over the first sessions:
+ * seven of thirteen settled trades came from a read within 5c of a coin flip,
+ * and every one of them lost.
+ */
+const MIN_VIEW = Number(process.env.MIN_VIEW ?? 0.05);
+/**
+ * Disagreement beyond which we believe the book over the model.
+ *
+ * A market pricing a leg at 2c near expiry is not mispriced, it is informed:
+ * spot has left the strike behind. A read taken minutes earlier cannot see
+ * that, so an enormous edge is evidence the read is stale, not a bargain.
+ */
+const MAX_EDGE = Number(process.env.MAX_EDGE ?? 0.35);
+/** Fraction of a window after which its read no longer describes the price. */
+const MAX_READ_AGE = Number(process.env.MAX_READ_AGE ?? 0.34);
 /** The venue's price grid, so a back off lands on a legal price. */
 const TICK = 0.001;
 
@@ -56,7 +76,15 @@ function wants(bot: Bot, market: Market): boolean {
 async function fairValue(bot: Bot, market: Market, mid: number | null): Promise<number | null> {
   if (bot.kind === "ai") {
     const read = cachedPrediction(market.marketId);
-    return read ? read.probability : null;
+    if (!read) return null;
+
+    // A read is a snapshot of the price when it was taken. Spot moves, so past
+    // a fraction of the window it describes a market that no longer exists,
+    // and the gap it opens against the book reads as edge when it is staleness.
+    const age = Math.floor(Date.now() / 1000) - read.predictedAt;
+    if (age > market.intervalSec * MAX_READ_AGE) return null;
+
+    return read.probability;
   }
 
   if (bot.kind === "quant") {
@@ -99,10 +127,15 @@ function makerLegs(fair: number, spread: number, bestBid: number | null, bestAsk
  * the book already agrees with fair there is no bet here, only fees.
  */
 function directionalLeg(fair: number, bestBid: number | null, bestAsk: number | null): Leg[] {
+  // No view, no bet. Without this the bot reads its own uncertainty as edge.
+  if (Math.abs(fair - 0.5) < MIN_VIEW) return [];
+
   if (bestAsk !== null && fair - bestAsk >= MIN_EDGE) {
+    if (fair - bestAsk > MAX_EDGE) return [];
     return [["yes", Math.min(0.97, fair)]];
   }
   if (bestBid !== null && bestBid - fair >= MIN_EDGE) {
+    if (bestBid - fair > MAX_EDGE) return [];
     // Buying NO at its own price, which is the complement of the YES bid.
     return [["no", Math.min(0.97, 1 - fair)]];
   }
