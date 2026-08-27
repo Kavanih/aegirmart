@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { cents, countdown, fetchMarkets, fetchPredictions, money, title, windowLabel, type Deck, type Market, type PredictionRecord, type PricePoint } from "./api";
+import { cents, countdown, fetchMarkets, fetchPredictions, money, spotAge, title, windowLabel, type Deck, type Market, type PredictionRecord, type PricePoint } from "./api";
 import { ProbabilityRing } from "./ProbabilityRing";
 import { Sparkline } from "./Sparkline";
 import { AssetMark } from "./AssetMark";
 import { Settled } from "./Settled";
+import { fetchBooks, type MarketBook } from "./api";
 import { Hero } from "./Hero";
 
 const LANES = [60, 300];
@@ -20,6 +21,7 @@ export function MarketGrid({ onSwipe, onOpen }: Props) {
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const [filter, setFilter] = useState<"all" | "BTC" | "ETH">("all");
   const [reads, setReads] = useState<Record<string, PredictionRecord>>({});
+  const [books, setBooks] = useState<Record<string, MarketBook>>({});
 
   useEffect(() => {
     const tick = window.setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
@@ -59,6 +61,23 @@ export function MarketGrid({ onSwipe, onOpen }: Props) {
     return out.sort((a, b) => a.market.expiry - b.market.expiry);
   }, [decks, now, filter]);
 
+  // The resting book, so a card quotes the price you would actually pay. Read
+  // from the same source the contract page uses, or the two disagree about the
+  // same market.
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      fetchBooks()
+        .then((all) => alive && setBooks(Object.fromEntries(all.map((b) => [b.marketId, b]))))
+        .catch(() => undefined);
+    load();
+    const poll = window.setInterval(load, 8_000);
+    return () => {
+      alive = false;
+      window.clearInterval(poll);
+    };
+  }, []);
+
   useEffect(() => {
     const ids = rows.map((r) => r.market.marketId);
     if (ids.length === 0) return;
@@ -97,8 +116,12 @@ export function MarketGrid({ onSwipe, onOpen }: Props) {
           {rows.map(({ market, series, spot }) => {
             const drift = spot === null ? null : spot - market.strike;
             const read = reads[market.marketId];
+            // What UP costs to buy right now, not what it last traded at. The
+            // last print can be minutes old with nothing resting behind it.
+            const askUp = books[market.marketId]?.asks[0]?.price ?? null;
+            const age = spotAge(series, now);
             // Only meaningful against a real book: an edge against no price is not an edge.
-            const edge = read && market.lastPrice !== null ? read.probability - market.lastPrice : null;
+            const edge = read && askUp !== null ? read.probability - askUp : null;
             return (
               <article key={market.marketId} className="market-card">
                 <header>
@@ -122,7 +145,9 @@ export function MarketGrid({ onSwipe, onOpen }: Props) {
                 <Sparkline points={series} target={market.strike} height={40} />
 
                 <div className="market-levels">
-                  <span>Target ${money(market.strike)}</span>
+                  <span title={age === null ? undefined : `Underlying priced ${Math.round(age)}s ago`}>
+                    Target ${money(market.strike)}
+                  </span>
                   {drift !== null && Math.abs(drift) >= 0.01 && (
                     <span className={drift >= 0 ? "over" : "under"}>
                       {drift >= 0 ? "↑" : "↓"} ${money(Math.abs(drift))}
@@ -134,7 +159,7 @@ export function MarketGrid({ onSwipe, onOpen }: Props) {
                   <span className="read-cell">
                     <span className="read-key">Market</span>
                     <span className="read-val">
-                      {market.lastPrice === null ? <em className="read-idle">no book yet</em> : cents(market.lastPrice)}
+                      {askUp === null ? <em className="read-idle">nothing offered</em> : cents(askUp)}
                     </span>
                   </span>
                   <span className="read-cell">

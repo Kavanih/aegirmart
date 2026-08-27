@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cents, countdown, money, title, windowLabel, windowRange, type Market, type PredictionState, type PricePoint } from "./api";
+import { cents, countdown, money, spotAge, title, windowLabel, windowRange, type Market, type PredictionState, type PricePoint } from "./api";
 import { Sparkline } from "./Sparkline";
 import { PayoutRow } from "./PayoutRow";
 import { bidPrice } from "./wallet/trade";
@@ -40,6 +40,7 @@ export function Card({ market, prediction, series, spot, swipe, now, depth, stak
   const edge = market_p !== null && model_p !== null ? model_p - market_p : null;
 
   const drift = spot === null ? null : spot - market.strike;
+  const age = spotAge(series, now);
 
   // What this side would cost against the market, falling back to the price
   // the swipe would rest at when nothing has traded.
@@ -78,7 +79,10 @@ export function Card({ market, prediction, series, spot, swipe, now, depth, stak
           <span className="level-val target">${money(market.strike)}</span>
         </div>
         <div className="level">
-          <span className="level-key">Current</span>
+          {/* Not a tick feed: the newest strike is the price, so say its age. */}
+          <span className="level-key">
+            {age === null ? "Current" : age < 5 ? "Current" : `Price ${Math.round(age)}s ago`}
+          </span>
           {spot === null ? (
             <span className="level-val">--</span>
           ) : (

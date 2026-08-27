@@ -54,6 +54,19 @@ export function title(market: { asset: string }): string {
 }
 
 // Local clock range for the window, matching how venues label their contracts.
+/**
+ * How old the spot proxy is.
+ *
+ * There is no tick feed here: the venue mints at the money every sixty
+ * seconds, so the newest strike IS the price, and it is between nought and
+ * sixty seconds old. On a one minute contract that is the whole window, so it
+ * is worth saying rather than calling it current.
+ */
+export function spotAge(series: PricePoint[], now: number): number | null {
+  if (series.length === 0) return null;
+  return Math.max(0, now - series[series.length - 1].t);
+}
+
 export function windowRange(market: Market): string {
   const end = new Date(market.expiry * 1000);
   const start = new Date((market.expiry - market.intervalSec) * 1000);
