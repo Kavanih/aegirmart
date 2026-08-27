@@ -184,6 +184,12 @@ export function BotPage() {
                   <dt>Daily cap</dt>
                   <dd>{bot.dailyTrades === 0 ? "no cap" : `${bot.dailyTrades} trades`}</dd>
                 </div>
+                {bot.kind !== "standard" && (
+                  <div>
+                    <dt>Only above</dt>
+                    <dd>{Math.round(bot.minProbability * 100)}% chance</dd>
+                  </div>
+                )}
                 {bot.kind === "ai" && (
                   <div className="bot-config-wide">
                     <dt><FaBrain aria-hidden="true" /> Model</dt>

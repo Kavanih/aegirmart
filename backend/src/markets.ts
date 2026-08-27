@@ -501,7 +501,16 @@ export type OrderRow = {
   side: string;
   /** The leg the order buys: 0 is up/YES, matching OutcomeBalance. */
   outcomeIndex: number;
+  /**
+   * Price of the leg this row shows, which is what was actually paid a share.
+   *
+   * The pool only ever stores a YES price, so a DOWN order at 56c is recorded
+   * as 44c. Reported raw beside a DOWN label it reads as a cheaper bet than it
+   * was, and every cost built from it came out wrong.
+   */
   price: number;
+  /** The raw YES price the venue stores, for anything working in book terms. */
+  priceYes: number;
   quantity: number;
   filled: number;
   remaining: number;
@@ -509,6 +518,15 @@ export type OrderRow = {
   rested: boolean;
   placedAt: number;
   txHash: string;
+  /** Null while the window is still open, or on a side we cannot price. */
+  won: boolean | null;
+  /**
+   * What this one order made or lost, in collateral. A winning share redeems
+   * at 1.00, so a buy filled at p profits (1 - p) a share and otherwise loses
+   * the p it paid. Kept per order rather than per market: a bot can hold both
+   * legs, and each fill still stands or falls on its own price.
+   */
+  pnl: number | null;
 };
 
 /**
@@ -521,7 +539,7 @@ export async function ordersFor(address: string, limit: number): Promise<OrderRo
       Order(limit: $limit, where: {owner: {_eq: $account}}, order_by: {placedAtTimestamp: desc}) {
         orderId side price fullQuantity filledQuantity quantityRemaining status rested
         placedAtTimestamp placedTxHash
-        market { marketId asset intervalSec strike expiry finalized }
+        market { marketId asset intervalSec strike expiry finalized winningOutcome }
       }
     }`,
     variables: { account: address.toLowerCase(), limit },
@@ -533,6 +551,21 @@ export async function ordersFor(address: string, limit: number): Promise<OrderRo
     .map((o) => {
       const expiry = Number(o.market.expiry ?? 0);
       const expired = Boolean(o.market.finalized) || expiry * 1000 < Date.now();
+
+      const side = String(o.side ?? "");
+      const outcomeIndex = /^(BUY_YES|SELL_NO)$/.test(side) ? 0 : 1;
+      const priceYes = Number(o.price) / PRICE_SCALE;
+      const price = outcomeIndex === 0 ? priceYes : 1 - priceYes;
+      const filled = Number(o.filledQuantity) / COLLATERAL_SCALE;
+
+      // Only a buy is priced here. A sell is a short whose result depends on
+      // what it was closing, which one order row cannot see, and none have
+      // ever filled on this venue anyway.
+      const bought = /^BUY_/.test(side);
+      const settled = Boolean(o.market.finalized) && o.market.winningOutcome !== null;
+      const won = settled && bought && filled > 0 ? Number(o.market.winningOutcome) === outcomeIndex : null;
+      const pnl = won === null ? null : won ? filled * (1 - price) : -(filled * price);
+
       return {
       orderId: String(o.orderId),
       marketId: String(o.market.marketId),
@@ -540,14 +573,15 @@ export async function ordersFor(address: string, limit: number): Promise<OrderRo
       intervalSec: Number(o.market.intervalSec ?? 0),
       strike: Number(o.market.strike ?? 0) / STRIKE_SCALE,
       expiry: Number(o.market.expiry ?? 0),
-      side: String(o.side ?? ""),
+      side,
       // Direction, not leg name. Buying YES and selling NO are both bets that
       // it goes up; selling YES and buying NO are both bets that it does not.
       // Reading only for "NO" labelled every SELL_YES as an up bet.
-      outcomeIndex: /^(BUY_YES|SELL_NO)$/.test(String(o.side)) ? 0 : 1,
-      price: Number(o.price) / PRICE_SCALE,
+      outcomeIndex,
+      price,
+      priceYes,
       quantity: Number(o.fullQuantity) / COLLATERAL_SCALE,
-      filled: Number(o.filledQuantity) / COLLATERAL_SCALE,
+      filled,
       remaining: Number(o.quantityRemaining) / COLLATERAL_SCALE,
       // The indexer leaves orders on settled markets as "Open" indefinitely.
       // Nothing can fill there, so reporting it as working is a lie.
@@ -555,6 +589,8 @@ export async function ordersFor(address: string, limit: number): Promise<OrderRo
       rested: Boolean(o.rested),
       placedAt: Number(o.placedAtTimestamp ?? 0),
       txHash: String(o.placedTxHash ?? ""),
+      won,
+      pnl,
       };
     });
 }

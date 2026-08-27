@@ -152,6 +152,14 @@ async function cycle(): Promise<void> {
         : directionalLeg(fair, bestBid, bestAsk);
       if (legs.length === 0) continue;
 
+      // Edge says the book is wrong; this says the side is likely. A bot can
+      // be handed a genuine mispricing on a coin toss and still want no part
+      // of it, so the floor is checked on the leg actually being bought.
+      if (bot.kind !== "standard") {
+        const chance = legs[0][0] === "yes" ? fair : 1 - fair;
+        if (chance < bot.minProbability) continue;
+      }
+
       // Claim the slot before awaiting, so a slow cycle cannot double quote.
       quoted.set(mark, market.expiry);
 

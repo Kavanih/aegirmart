@@ -9,7 +9,16 @@ const MAX_RECORDS = 100;
 const POLL_MS = 15_000;
 // Bound the work per tick so a slow model cannot stall the next sweep.
 const MAX_PER_TICK = 2;
-const LANES = [60, 300];
+/**
+ * Which windows to read. A read costs one call from a fixed daily allowance
+ * and takes tens of seconds, so the sixty second lane spends the budget on
+ * answers that arrive against a price which has already moved. Default to the
+ * five minute lane, which is the one an AI bot can act on.
+ */
+const LANES = (process.env.TRACKER_LANES ?? "300")
+  .split(",")
+  .map((n) => Number(n.trim()))
+  .filter((n) => Number.isFinite(n) && n > 0);
 
 export type PredictionRecord = {
   marketId: string;
@@ -254,7 +263,7 @@ export function startTracker(apiKey: string): void {
   setInterval(() => void tick(), POLL_MS);
   const { limit, remaining } = budgetStatus();
   console.log(
-    `tracker running, polling every ${POLL_MS / 1000}s, keeping ${MAX_RECORDS} records, ` +
-      `${remaining}/${limit} free requests left today`,
+    `tracker running on the ${LANES.join(", ")}s lane${LANES.length > 1 ? "s" : ""}, ` +
+      `polling every ${POLL_MS / 1000}s, ${remaining}/${limit} free requests left today`,
   );
 }

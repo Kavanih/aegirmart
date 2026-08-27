@@ -52,6 +52,10 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
   if (missing) return <EmptyState title="Bot not found" hint="It may have been deleted." />;
   if (!bot) return <p className="read-idle">Loading bot…</p>;
 
+  // Orders whose window has closed and whose side we can price.
+  const decided = orders.filter((o) => o.won !== null);
+  const orderPnl = decided.reduce((sum, o) => sum + (o.pnl ?? 0), 0);
+
   const capped = bot.dailyTrades > 0;
   const left = capped ? Math.max(0, bot.dailyTrades - bot.tradesToday) : null;
 
@@ -117,6 +121,15 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
 
       <div className="stat-grid">
         <Stat label="Filled" value={summary ? String(summary.filled) : "--"} tone={summary && summary.filled > 0 ? "good" : undefined} />
+        <Stat
+          label="Settled orders"
+          value={decided.length ? `${decided.filter((o) => o.won).length}/${decided.length} won` : "--"}
+        />
+        <Stat
+          label="From settled"
+          value={decided.length ? `${orderPnl >= 0 ? "+" : ""}${orderPnl.toFixed(2)}` : "--"}
+          tone={decided.length ? (orderPnl >= 0 ? "good" : "bad") : undefined}
+        />
         <Stat label="Resting" value={summary ? String(summary.open) : "--"} />
         <Stat label="Expired" value={summary ? String(summary.expired) : "--"} />
         <Stat label="Volume filled" value={summary ? summary.volume.toFixed(2) : "--"} />
@@ -160,6 +173,7 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
                 <th className="num">Size</th>
                 <th className="num">Filled</th>
                 <th className="num">Status</th>
+                <th className="num">Result</th>
                 <th className="num">Placed</th>
               </tr>
             </thead>
@@ -180,7 +194,15 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
                   <td className="num">{Math.round(o.price * 100)}c</td>
                   <td className="num">{o.quantity.toFixed(2)}</td>
                   <td className={`num ${o.filled === 0 ? "muted-cell" : ""}`}>{o.filled.toFixed(2)}</td>
-                  <td className={`num order-status ${o.status.toLowerCase()}`}>{o.status}</td>
+                  <td className="num">
+                    {o.won === null ? (
+                      <span className="muted-cell">--</span>
+                    ) : (
+                      <span className={o.won ? "pos-result win" : "pos-result loss"}>
+                        {o.won ? "Won" : "Lost"} {o.pnl !== null && `${o.pnl >= 0 ? "+" : ""}${o.pnl.toFixed(2)}`}
+                      </span>
+                    )}
+                  </td>
                   <td className="num muted-cell">{stamp(o.placedAt)}</td>
                 </tr>
               ))}
@@ -188,6 +210,12 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
           </table>
         </TableScroll>
       )}
+
+      <p className="footnote">
+        Result is what each fill is worth on its own: a winning share redeems at 1.00, so a buy filled at 44c makes 56c
+        a share and a loser gives up the 44c it paid. Unfilled and still-open orders show no result. This counts what
+        the window decided, whether or not the winnings have been claimed yet.
+      </p>
 
       <p className="footnote">
         Orders are read from the venue against this bot's signing address, so anything else signed by that key appears

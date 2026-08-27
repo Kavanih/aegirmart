@@ -50,6 +50,7 @@ export function BotForm({ address, plan, proPrice, editing, keyStorage, onClose,
   const [stake, setStake] = useState(String(editing?.stake ?? 5));
   const [dailyTrades, setDailyTrades] = useState(String(editing?.dailyTrades ?? 50));
   const [spread, setSpread] = useState(String(Math.round((editing?.spread ?? 0.02) * 100)));
+  const [minChance, setMinChance] = useState(String(Math.round((editing?.minProbability ?? 0.5) * 100)));
   const [model, setModel] = useState(editing?.model ?? "");
   const [models, setModels] = useState<string[]>([]);
   const [privateKey, setPrivateKey] = useState("");
@@ -82,6 +83,7 @@ export function BotForm({ address, plan, proPrice, editing, keyStorage, onClose,
       stake: Number(stake),
       dailyTrades: Number(dailyTrades),
       spread: Number(spread) / 100,
+      minProbability: Number(minChance) / 100,
       model: kind === "ai" ? model || null : null,
     };
 
@@ -188,6 +190,28 @@ export function BotForm({ address, plan, proPrice, editing, keyStorage, onClose,
             </label>
           )}
         </div>
+
+        {/* Only a bot that picks a side has a chance of winning to floor. */}
+        {kind !== "standard" && (
+          <label className="field">
+            <span>Only bet above</span>
+            <div className="input-unit">
+              <input
+                type="number"
+                min="0"
+                max="99"
+                step="1"
+                value={minChance}
+                onChange={(e) => setMinChance(e.target.value)}
+              />
+              <span>% chance</span>
+            </div>
+            <span className="field-note">
+              The model rates each side's chance of winning after its analysis. Below this, the bot passes even where
+              the price looks cheap: a bargain on a coin toss is still a coin toss.
+            </span>
+          </label>
+        )}
 
         {kind === "ai" && (
           <p className="field-note lane-note">

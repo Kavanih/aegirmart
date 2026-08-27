@@ -217,6 +217,8 @@ export type Bot = {
   stake: number;
   dailyTrades: number;
   spread: number;
+  /** Floor on the chance of winning before a directional bot acts. */
+  minProbability: number;
   model: string | null;
   status: "running" | "paused";
   createdAt: number;
@@ -262,7 +264,9 @@ export type BotLimits = {
   /** False when the server has no encryption secret, so no key can be stored. */
   keyStorage: boolean;
 };
-export type BotDraft = Partial<Pick<Bot, "name" | "kind" | "asset" | "stake" | "dailyTrades" | "spread" | "model" | "status">>;
+export type BotDraft = Partial<
+  Pick<Bot, "name" | "kind" | "asset" | "stake" | "dailyTrades" | "spread" | "minProbability" | "model" | "status">
+>;
 
 export async function fetchBots(address: string): Promise<{ bots: Bot[]; plan: Plan; limits: BotLimits } | null> {
   const res = await fetch(`/api/bots?address=${address}`);
@@ -378,6 +382,12 @@ export type OrderRow = {
   remaining: number;
   status: string;
   rested: boolean;
+  /** The raw YES price the venue stores, for anything working in book terms. */
+  priceYes: number;
+  /** Null while the window is open, or on a side that cannot be priced. */
+  won: boolean | null;
+  /** What this one order made or lost once its window settled. */
+  pnl: number | null;
   placedAt: number;
   txHash: string;
 };
