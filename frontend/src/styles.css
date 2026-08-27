@@ -1228,3 +1228,5 @@ button.logo:hover .wordmark span { color: var(--text); }
   color: var(--accent); background: var(--surface-2); border: 1px solid var(--accent); }
 .ask-model:hover:not(:disabled) { background: var(--surface); }
 .ask-model:disabled { opacity: 0.45; cursor: default; border-color: var(--line); color: var(--muted); }
+
+.payout-depth { display: block; margin-top: 4px; font-size: 10.5px; color: var(--conf-medium); line-height: 1.45; }

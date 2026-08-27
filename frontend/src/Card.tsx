@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cents, countdown, money, spotAge, title, windowLabel, windowRange, type Market, type PredictionState, type PricePoint } from "./api";
+import { cents, countdown, money, spotAge, title, windowLabel, windowRange, type Market, type MarketBook, type PredictionState, type PricePoint } from "./api";
 import { Sparkline } from "./Sparkline";
 import { PayoutRow } from "./PayoutRow";
 import { bidPrice } from "./wallet/trade";
@@ -14,6 +14,8 @@ type Props = {
   now: number;
   depth: number;
   stake: number;
+  /** The resting book, for how much of this side is actually for sale. */
+  book?: MarketBook | null;
   /** Asks the model about this one contract. Absent once a read exists. */
   onRead?: () => void;
 };
@@ -25,7 +27,7 @@ function marketProbability(state: PredictionState, market: Market): number | nul
   return market.lastPrice;
 }
 
-export function Card({ market, prediction, series, spot, swipe, now, depth, stake, onRead }: Props) {
+export function Card({ market, prediction, series, spot, swipe, now, depth, stake, book, onRead }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const isTop = depth === 0;
@@ -49,6 +51,11 @@ export function Card({ market, prediction, series, spot, swipe, now, depth, stak
   const payPrice = marketSide !== null && marketSide > 0 && marketSide < 1
     ? marketSide
     : bidPrice(side, model_p);
+
+  // Buying DOWN is selling UP, so the offers for it are the UP bids inverted.
+  const offered = book
+    ? (side === "up" ? book.asks : book.bids).reduce((n, l) => n + l.size, 0)
+    : null;
 
   const style = {
     transform: `translate3d(${dx}px, ${dy + depth * 10}px, 0) rotate(${swipe?.rotation ?? 0}deg) scale(${
@@ -146,6 +153,7 @@ export function Card({ market, prediction, series, spot, swipe, now, depth, stak
           With no book to pay, it falls back to the resting bid. */}
       <PayoutRow
         stake={stake}
+        offered={offered}
         price={payPrice}
         probability={intent === "down" && model_p !== null ? 1 - model_p : model_p}
         side={intent === "down" ? "down" : "up"}

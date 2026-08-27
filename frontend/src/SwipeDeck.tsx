@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "./Card";
-import { fetchMarkets, fetchPrediction, fetchPredictions, recordToState, title, type Market, type PredictionState, type PricePoint } from "./api";
+import { fetchBooks, fetchMarkets, fetchPrediction, fetchPredictions, recordToState, title, type Market, type MarketBook, type PredictionState, type PricePoint } from "./api";
 import { useSwipe, type Direction } from "./useSwipe";
-import { useAccount } from "wagmi";
+import { bidPrice, quoteFor } from "./wallet/trade";
+import { useAccount, useReadContract } from "wagmi";
+import { erc20Abi, formatUnits } from "viem";
+import { TUSDC } from "./wallet/config";
 import { useTrade } from "./wallet/useTrade";
 import { useToast } from "./Toast";
 import { StakePanel } from "./StakePanel";
@@ -34,7 +37,34 @@ export function SwipeDeck({ intervalSec, focusMarketId }: DeckProps) {
   // Sends the swipe currently sitting in its undo window, if there is one.
   const flushPending = useRef<() => void>(noop);
   const [stake, setStake] = useState(5);
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
+  const [books, setBooks] = useState<Record<string, MarketBook>>({});
+
+  // The wallet's collateral. An order it cannot escrow reverts on chain, so
+  // the swipe is stopped here instead.
+  const { data: collateral } = useReadContract({
+    abi: erc20Abi,
+    address: TUSDC.address,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
+  const balance = Number(formatUnits(collateral ?? 0n, TUSDC.decimals));
+
+  // The resting book, so a card can say how much is actually for sale.
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      fetchBooks()
+        .then((all) => alive && setBooks(Object.fromEntries(all.map((b) => [b.marketId, b]))))
+        .catch(() => undefined);
+    load();
+    const poll = window.setInterval(load, 8_000);
+    return () => {
+      alive = false;
+      window.clearInterval(poll);
+    };
+  }, []);
   const { place } = useTrade();
   const toast = useToast();
   const lastPhase = useRef<string>("idle");
@@ -161,6 +191,17 @@ export function SwipeDeck({ intervalSec, focusMarketId }: DeckProps) {
         return;
       }
 
+      // An order the wallet cannot escrow reverts on chain, so refuse it here
+      // rather than spending gas to be told. Skipping still moves the deck on.
+      const read = predictions[market.marketId];
+      const fair = read?.status === "ok" ? read.prediction.probability : null;
+      const priced = quoteFor(stake, bidPrice(direction, fair));
+      if (isConnected && priced && priced.escrow > balance) {
+        toast.push("error", `That needs ${priced.escrow.toFixed(2)} tUSDC and the wallet holds ${balance.toFixed(2)}`);
+        setIndex((i) => Math.max(0, i - 1));
+        return;
+      }
+
       // Commit optimistically and give a short window to take it back. Undo
       // only ever applies to the newest swipe, so a second swipe inside the
       // window must SEND the previous order rather than cancel its timer:
@@ -172,8 +213,6 @@ export function SwipeDeck({ intervalSec, focusMarketId }: DeckProps) {
 
       const send = () => {
         setPending(null);
-        const read = predictions[market.marketId];
-        const fair = read?.status === "ok" ? read.prediction.probability : null;
         if (!isConnected) return;
 
         // One toast per order, updated in place. Pending toasts never expire on
@@ -210,7 +249,7 @@ export function SwipeDeck({ intervalSec, focusMarketId }: DeckProps) {
         send();
       }, 3000);
     },
-    [deck, isConnected, place, stake, predictions],
+    [deck, isConnected, place, stake, predictions, balance, toast],
   );
 
   const { state, reduced, handlers, commitByKey } = useSwipe(advance, Boolean(top) && online);
@@ -254,6 +293,7 @@ export function SwipeDeck({ intervalSec, focusMarketId }: DeckProps) {
                   now={now}
                   depth={depth}
                   stake={stake}
+                  book={books[market.marketId] ?? null}
                   onRead={depth === 0 ? () => requestRead(market) : undefined}
                 />
               ))

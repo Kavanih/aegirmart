@@ -1,10 +1,17 @@
 import { expectedValue, fmt, quotePayout } from "./payout";
 
-type Props = { stake: number; price: number | null; probability: number | null; side: "up" | "down" };
+type Props = {
+  stake: number;
+  price: number | null;
+  probability: number | null;
+  side: "up" | "down";
+  /** Shares resting on this side, or null when the book is unknown. */
+  offered?: number | null;
+};
 
 // Shows what the stake buys before the swipe commits, plus whether the model
 // thinks that price is worth taking.
-export function PayoutRow({ stake, price, probability, side }: Props) {
+export function PayoutRow({ stake, price, probability, side, offered = null }: Props) {
   if (price === null) {
     return <p className="payout-row muted">No resting price yet. Your swipe rests a bid at the model read.</p>;
   }
@@ -25,6 +32,15 @@ export function PayoutRow({ stake, price, probability, side }: Props) {
       <span className="payout-sub">
         {fmt(quote.shares)} shares at {Math.round(price * 100)}c &middot; {fmt(quote.returnMultiple, 2)}x
       </span>
+      {/* A swipe rests a bid, so asking for more than is offered is not an
+          error. It just will not all land now, and that is worth knowing. */}
+      {offered !== null && quote.shares > offered + 0.005 && (
+        <span className="payout-depth">
+          {offered <= 0
+            ? "Nothing offered on this side yet, so this will rest"
+            : `Only ${fmt(offered)} shares offered, so ${fmt(quote.shares - offered)} of this rests`}
+        </span>
+      )}
       {edge !== null && Math.abs(edge) > 0.02 && (
         <span className={`payout-ev ${edge > 0 ? "good" : "bad"}`}>
           {edge > 0 ? "+" : ""}{Math.round(edge * 100)}% EV on the {side} side
