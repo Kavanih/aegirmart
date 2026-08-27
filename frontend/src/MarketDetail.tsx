@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useReadContract } from "wagmi";
+import { erc20Abi, formatUnits } from "viem";
 import {
   countdown, fetchBooks, fetchMarketDetail, money, shortAddress, stamp, title, windowLabel, windowRange,
   type MarketBook, type MarketDetail as Detail,
@@ -9,6 +10,7 @@ import { Sparkline } from "./Sparkline";
 import { StakePanel } from "./StakePanel";
 import { useTrade } from "./wallet/useTrade";
 import { quoteFor } from "./wallet/trade";
+import { TUSDC } from "./wallet/config";
 import { useToast } from "./Toast";
 import { EmptyState } from "./Table";
 
@@ -32,6 +34,16 @@ export function MarketDetail({ marketId, onBack }: Props) {
   const [book, setBook] = useState<MarketBook | null>(null);
 
   const { address, isConnected } = useAccount();
+
+  // The wallet's collateral, so an order that cannot be escrowed is stopped
+  // here rather than reverting on chain.
+  const { data: collateral } = useReadContract({
+    abi: erc20Abi,
+    address: TUSDC.address,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  });
 
   // The resting book, for what a leg actually costs rather than what it last
   // traded at. Polled with the page.
@@ -90,6 +102,30 @@ export function MarketDetail({ marketId, onBack }: Props) {
   const upMarket = legPrice(market.lastPrice, "up");
   const downMarket = legPrice(market.lastPrice, "down");
   const modelUp = read ? read.probability : null;
+  /**
+   * What can actually be bought on a leg at or under a limit.
+   *
+   * Buying NO is selling YES, so the offers for DOWN are the YES bids read
+   * upside down: a bid for YES at b is an offer of NO at 1 - b.
+   */
+  const fillableAt = (leg: "up" | "down", limit: number) => {
+    const levels = leg === "up"
+      ? (book?.asks ?? []).map((l) => ({ price: l.price, size: l.size }))
+      : (book?.bids ?? []).map((l) => ({ price: 1 - l.price, size: l.size }));
+
+    return levels
+      .filter((l) => l.price <= limit + 1e-9)
+      .reduce((acc, l) => ({ shares: acc.shares + l.size, cost: acc.cost + l.size * l.price }), { shares: 0, cost: 0 });
+  };
+
+  /** The cheapest offer on a leg, which is the lowest limit that fills anything. */
+  const bestOfferOn = (leg: "up" | "down") => {
+    const levels = leg === "up"
+      ? (book?.asks ?? []).map((l) => l.price)
+      : (book?.bids ?? []).map((l) => 1 - l.price);
+    return levels.length ? Math.min(...levels) : null;
+  };
+
   const bestBidUp = book?.bids[0]?.price ?? null;
   const bestAskUp = book?.asks[0]?.price ?? null;
   const depth = (book?.bids.length ?? 0) + (book?.asks.length ?? 0);
@@ -117,8 +153,21 @@ export function MarketDetail({ marketId, onBack }: Props) {
   const quote = ticketPrice && ticketPrice > 0 && stake > 0 ? quoteFor(stake, ticketPrice) : null;
   const shares = quote?.shares ?? null;
   // An order fills now only when something is already offered at or under it.
-  const legAsk = side === "up" ? bestAskUp : bestBidUp === null ? null : 1 - bestBidUp;
+  const legAsk = bestOfferOn(side);
   const fillsNow = ticketPrice !== null && legAsk !== null && ticketPrice >= legAsk;
+
+  // How much of this order the book can actually absorb at the chosen price.
+  const fill = ticketPrice === null ? { shares: 0, cost: 0 } : fillableAt(side, ticketPrice);
+  const wanted = shares ?? 0;
+  const shortfall = Math.max(0, wanted - fill.shares);
+  const balance = Number(formatUnits(collateral ?? 0n, TUSDC.decimals));
+  const overBalance = quote !== null && quote.escrow > balance;
+
+  // Refuse only what cannot work: no price, nothing to buy at it, or more
+  // collateral than the wallet holds. A partial fill is a real outcome, so it
+  // is warned about rather than blocked.
+  const blocked =
+    !live || stake <= 0 || ticketPrice === null || overBalance || fill.shares <= 0;
 
   const onBuy = () => {
     if (!isConnected) return toast.push("error", "Connect a wallet first");
@@ -403,10 +452,22 @@ export function MarketDetail({ marketId, onBack }: Props) {
             <dt>Pays if right</dt>
             <dd className="pays">{shares === null ? "--" : shares.toFixed(2)}</dd>
           </div>
+          <div>
+            <dt>Available here</dt>
+            <dd className={fill.shares <= 0 ? "warn" : ""}>
+              {fill.shares <= 0 ? "none" : `${fill.shares.toFixed(2)} shares`}
+            </dd>
+          </div>
           <div className="ticket-preview-wide">
             <dt>Fills</dt>
-            <dd className={fillsNow ? "pays" : ""}>
-              {fillsNow ? "Immediately, against a resting offer" : "Only if someone crosses it"}
+            <dd className={fill.shares <= 0 ? "warn" : shortfall > 0.005 ? "" : "pays"}>
+              {fill.shares <= 0
+                ? legAsk === null
+                  ? "Nothing is offered on this side"
+                  : `Nothing at ${Math.round(ticketPrice! * 100)}c — the cheapest offer is ${Math.round(legAsk * 100)}c`
+                : shortfall > 0.005
+                  ? `${fill.shares.toFixed(2)} of ${wanted.toFixed(2)} shares now, the rest rests until someone sells`
+                  : "All of it, immediately"}
             </dd>
           </div>
           <div>
@@ -415,9 +476,34 @@ export function MarketDetail({ marketId, onBack }: Props) {
           </div>
         </dl>
 
-        <button className="ticket-cta" onClick={onBuy} disabled={!live || stake <= 0}>
-          {!live ? "Window closed" : `Buy ${side === "up" ? "Up" : "Down"}`}
+        <button className="ticket-cta" onClick={onBuy} disabled={blocked}>
+          {!live
+            ? "Window closed"
+            : stake <= 0
+              ? "Enter an amount"
+              : overBalance
+                ? "More than your balance"
+                : fill.shares <= 0
+                  ? "Nothing to buy at this price"
+                  : `Buy ${side === "up" ? "Up" : "Down"}`}
         </button>
+
+        {/* A blocked order usually has one obvious fix, so offer it. */}
+        {live && stake > 0 && !overBalance && fill.shares <= 0 && legAsk !== null && (
+          <button className="ticket-fix" onClick={() => setSidePicked(true)}>
+            Cheapest offer is {Math.round(legAsk * 100)}c
+          </button>
+        )}
+        {live && overBalance && (
+          <button className="ticket-fix" onClick={() => setStake(Math.floor(balance * 100) / 100)}>
+            Use your balance, {balance.toFixed(2)} tUSDC
+          </button>
+        )}
+        {live && shortfall > 0.005 && fill.shares > 0 && (
+          <button className="ticket-fix" onClick={() => setStake(Math.max(0.01, Math.floor(fill.cost * 100) / 100))}>
+            Size it to what is available, {fill.cost.toFixed(2)} tUSDC
+          </button>
+        )}
 
         <p className="ticket-fine">
           Places a resting limit order at the model's price. It fills only if someone crosses it, and expires with the
