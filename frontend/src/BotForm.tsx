@@ -167,7 +167,7 @@ export function BotForm({ address, plan, proPrice, editing, keyStorage, onClose,
           </label>
         </div>
 
-        <div className="field-row">
+        <div className={kind === "standard" ? "field-row" : "field-row single"}>
           <label className="field">
             <span>Trades per day</span>
             <div className="input-unit">
@@ -176,13 +176,17 @@ export function BotForm({ address, plan, proPrice, editing, keyStorage, onClose,
             </div>
           </label>
 
-          <label className="field">
-            <span>Half spread</span>
-            <div className="input-unit">
-              <input type="number" min="1" max="49" step="1" value={spread} onChange={(e) => setSpread(e.target.value)} />
-              <span>cents</span>
-            </div>
-          </label>
+          {/* Only a market maker quotes two prices, so only it has a gap to
+              set. A directional bot takes one side at one price. */}
+          {kind === "standard" && (
+            <label className="field">
+              <span>Half spread</span>
+              <div className="input-unit">
+                <input type="number" min="1" max="49" step="1" value={spread} onChange={(e) => setSpread(e.target.value)} />
+                <span>cents</span>
+              </div>
+            </label>
+          )}
         </div>
 
         {kind === "ai" && (

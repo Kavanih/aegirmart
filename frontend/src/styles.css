@@ -1026,6 +1026,7 @@ button.logo:hover .wordmark span { color: var(--text); }
   border-radius: 9px; padding: 10px 12px; font-size: 13.5px; font-family: inherit; width: 100%; }
 .field input:focus, .field select:focus { outline: none; border-color: var(--accent); }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field-row.single { grid-template-columns: 1fr; }
 
 .input-unit { position: relative; display: flex; align-items: center; }
 .input-unit input { padding-right: 58px; }

@@ -174,10 +174,12 @@ export function BotPage() {
                   <dt><FaCoins aria-hidden="true" /> Stake</dt>
                   <dd>{bot.stake} tUSDC</dd>
                 </div>
-                <div>
-                  <dt><FaSlidersH aria-hidden="true" /> Spread</dt>
-                  <dd>±{Math.round(bot.spread * 100)}c</dd>
-                </div>
+                {bot.kind === "standard" && (
+                  <div>
+                    <dt><FaSlidersH aria-hidden="true" /> Spread</dt>
+                    <dd>±{Math.round(bot.spread * 100)}c</dd>
+                  </div>
+                )}
                 <div>
                   <dt>Daily cap</dt>
                   <dd>{bot.dailyTrades === 0 ? "no cap" : `${bot.dailyTrades} trades`}</dd>
