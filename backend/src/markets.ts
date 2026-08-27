@@ -491,6 +491,55 @@ export async function tradesFor(marketId: string, limit: number): Promise<Market
     .reverse();
 }
 
+type OrderSpend = { shares: number; cost: number };
+
+/**
+ * Collateral actually paid per order, from its fills.
+ *
+ * A fill carries the YES price, so the NO leg pays the complement: buying N
+ * shares of NO for a YES quote value of V costs N - V. Same inversion as the
+ * order price, one level down.
+ */
+async function spendByOrder(addressRaw: string, limit = 500): Promise<Map<string, OrderSpend>> {
+  const account = addressRaw.toLowerCase();
+  const body = JSON.stringify({
+    query: `query OrderFills($account: String!, $limit: Int!) {
+      Fill(
+        limit: $limit
+        where: {_or: [{maker: {_eq: $account}}, {taker: {_eq: $account}}]}
+        order_by: {timestamp: desc}
+      ) {
+        maker taker makerSide takerSide makerOrderId takerOrderId quantity quoteQuantity
+      }
+    }`,
+    variables: { account, limit },
+  });
+
+  const data = await query<{ Fill: Record<string, any>[] }>(body);
+  const spend = new Map<string, OrderSpend>();
+
+  for (const f of data.Fill) {
+    // One account can sit on both sides of a fill, so read the side that
+    // belongs to it rather than assuming taker.
+    const isTaker = String(f.taker ?? "").toLowerCase() === account;
+    const side = String((isTaker ? f.takerSide : f.makerSide) ?? "");
+    const orderId = String((isTaker ? f.takerOrderId : f.makerOrderId) ?? "");
+    if (!orderId || !/^BUY_/.test(side)) continue;
+
+    const shares = Number(f.quantity) / COLLATERAL_SCALE;
+    const yesValue = Number(f.quoteQuantity) / COLLATERAL_SCALE;
+    const cost = side === "BUY_YES" ? yesValue : shares - yesValue;
+    if (!Number.isFinite(shares) || shares <= 0 || !Number.isFinite(cost)) continue;
+
+    const entry = spend.get(orderId) ?? { shares: 0, cost: 0 };
+    entry.shares += shares;
+    entry.cost += cost;
+    spend.set(orderId, entry);
+  }
+
+  return spend;
+}
+
 export type OrderRow = {
   orderId: string;
   marketId: string;
@@ -502,15 +551,22 @@ export type OrderRow = {
   /** The leg the order buys: 0 is up/YES, matching OutcomeBalance. */
   outcomeIndex: number;
   /**
-   * Price of the leg this row shows, which is what was actually paid a share.
+   * Average price actually paid a share on this leg, from the fills.
    *
-   * The pool only ever stores a YES price, so a DOWN order at 56c is recorded
-   * as 44c. Reported raw beside a DOWN label it reads as a cheaper bet than it
-   * was, and every cost built from it came out wrong.
+   * Not the limit price. A taking order crosses the book and fills at whatever
+   * is resting, so an order carrying a 97c limit routinely pays 76c. Pricing a
+   * result off the limit overstated every loss and hid most of every win.
+   *
+   * Falls back to the limit price while nothing has filled, where there is no
+   * average to report yet.
    */
   price: number;
+  /** The limit this order was placed at, in the leg's own terms. */
+  limitPrice: number;
   /** The raw YES price the venue stores, for anything working in book terms. */
   priceYes: number;
+  /** Collateral actually paid for the filled shares. */
+  cost: number;
   quantity: number;
   filled: number;
   remaining: number;
@@ -538,7 +594,7 @@ export async function ordersFor(address: string, limit: number): Promise<OrderRo
     query: `query Orders($account: String!, $limit: Int!) {
       Order(limit: $limit, where: {owner: {_eq: $account}}, order_by: {placedAtTimestamp: desc}) {
         orderId side price fullQuantity filledQuantity quantityRemaining status rested
-        placedAtTimestamp placedTxHash
+        orderId placedAtTimestamp placedTxHash
         market { marketId asset intervalSec strike expiry finalized winningOutcome }
       }
     }`,
@@ -546,6 +602,12 @@ export async function ordersFor(address: string, limit: number): Promise<OrderRo
   });
 
   const data = await query<{ Order: Record<string, any>[] }>(body);
+
+  // What each order actually paid, keyed by order id. Fetched separately
+  // because the venue's limit price says what an order was willing to pay, not
+  // what it got.
+  const spend = await spendByOrder(address).catch(() => new Map<string, OrderSpend>());
+
   return data.Order
     .filter((o) => o.market?.marketId)
     .map((o) => {
@@ -555,8 +617,14 @@ export async function ordersFor(address: string, limit: number): Promise<OrderRo
       const side = String(o.side ?? "");
       const outcomeIndex = /^(BUY_YES|SELL_NO)$/.test(side) ? 0 : 1;
       const priceYes = Number(o.price) / PRICE_SCALE;
-      const price = outcomeIndex === 0 ? priceYes : 1 - priceYes;
+      const limitPrice = outcomeIndex === 0 ? priceYes : 1 - priceYes;
       const filled = Number(o.filledQuantity) / COLLATERAL_SCALE;
+
+      // What this order actually paid, from its own fills. Falls back to the
+      // limit only while nothing has filled and there is no average yet.
+      const paid = spend.get(String(o.orderId));
+      const cost = paid ? paid.cost : filled * limitPrice;
+      const price = paid && paid.shares > 0 ? paid.cost / paid.shares : limitPrice;
 
       // Only a buy is priced here. A sell is a short whose result depends on
       // what it was closing, which one order row cannot see, and none have
@@ -564,7 +632,8 @@ export async function ordersFor(address: string, limit: number): Promise<OrderRo
       const bought = /^BUY_/.test(side);
       const settled = Boolean(o.market.finalized) && o.market.winningOutcome !== null;
       const won = settled && bought && filled > 0 ? Number(o.market.winningOutcome) === outcomeIndex : null;
-      const pnl = won === null ? null : won ? filled * (1 - price) : -(filled * price);
+      // A winning share redeems at 1.00, so the payout is the share count.
+      const pnl = won === null ? null : won ? filled - cost : -cost;
 
       return {
       orderId: String(o.orderId),
@@ -579,7 +648,9 @@ export async function ordersFor(address: string, limit: number): Promise<OrderRo
       // Reading only for "NO" labelled every SELL_YES as an up bet.
       outcomeIndex,
       price,
+      limitPrice,
       priceYes,
+      cost,
       quantity: Number(o.fullQuantity) / COLLATERAL_SCALE,
       filled,
       remaining: Number(o.quantityRemaining) / COLLATERAL_SCALE,

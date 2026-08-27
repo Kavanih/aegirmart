@@ -390,8 +390,12 @@ export type OrderRow = {
   remaining: number;
   status: string;
   rested: boolean;
+  /** The limit this order was placed at, in the leg's own terms. */
+  limitPrice: number;
   /** The raw YES price the venue stores, for anything working in book terms. */
   priceYes: number;
+  /** Collateral actually paid for the filled shares. */
+  cost: number;
   /** Null while the window is open, or on a side that cannot be priced. */
   won: boolean | null;
   /** What this one order made or lost once its window settled. */

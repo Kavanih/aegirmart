@@ -346,7 +346,7 @@ export function MarketDetail({ marketId, onBack }: Props) {
                     <td className="num">{Math.round(o.price * 100)}c</td>
                     <td className="num">{o.quantity.toFixed(2)}</td>
                     <td className={`num ${o.filled === 0 ? "muted-cell" : ""}`}>{o.filled.toFixed(2)}</td>
-                    <td className="num muted-cell">{(o.remaining * o.price).toFixed(2)}</td>
+                    <td className="num muted-cell">{(o.remaining * o.limitPrice).toFixed(2)}</td>
                     <td className={`num order-status ${o.status.toLowerCase()}`}>{o.status}</td>
                     <td className="num muted-cell">{stamp(o.placedAt)}</td>
                   </tr>

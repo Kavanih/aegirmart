@@ -53,7 +53,7 @@ export function BotForm({ address, plan, readCeiling, proPrice, editing, keyStor
   const [dailyTrades, setDailyTrades] = useState(String(editing?.dailyTrades ?? 50));
   const [dailyReads, setDailyReads] = useState(String(editing?.dailyReads ?? 10));
   const [spread, setSpread] = useState(String(Math.round((editing?.spread ?? 0.02) * 100)));
-  const [minChance, setMinChance] = useState(String(Math.round((editing?.minProbability ?? 0.5) * 100)));
+  const [minChance, setMinChance] = useState(String(Math.round((editing?.minProbability ?? 0) * 100)));
   const [model, setModel] = useState(editing?.model ?? "");
   const [models, setModels] = useState<string[]>([]);
   const [privateKey, setPrivateKey] = useState("");

@@ -89,7 +89,7 @@ let bots: Record<string, Bot> = load<Bot>(BOTS);
 // Left undefined, every comparison against it is NaN and quietly false, so the
 // floor would read as set on the card and do nothing in the runner.
 for (const bot of Object.values(bots)) {
-  if (typeof bot.minProbability !== "number") bot.minProbability = 0.5;
+  if (typeof bot.minProbability !== "number") bot.minProbability = 0;
   if (typeof bot.dailyReads !== "number") bot.dailyReads = bot.kind === "ai" ? 10 : 0;
   if (typeof bot.readsToday !== "number") bot.readsToday = 0;
 }
@@ -282,7 +282,10 @@ function clean(draft: BotDraft, plan: Plan, address: string, current?: Bot): { b
   const spread = Number(draft.spread ?? current?.spread ?? 0.02);
   if (!Number.isFinite(spread) || spread <= 0 || spread >= 0.5) return { error: "spread must be between 0 and 0.5" };
 
-  const minProbability = Number(draft.minProbability ?? current?.minProbability ?? 0.5);
+  // Defaults to off. A floor is variance control, not edge control: at 50 it
+  // silently refuses about half the signals on an instrument that is close to
+  // a coin flip, which reads as a broken bot rather than a careful one.
+  const minProbability = Number(draft.minProbability ?? current?.minProbability ?? 0);
   if (!Number.isFinite(minProbability) || minProbability < 0 || minProbability >= 1) {
     return { error: "the minimum chance must be between 0 and 100" };
   }

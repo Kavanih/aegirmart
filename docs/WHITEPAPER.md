@@ -84,19 +84,17 @@ upward into more risk than the operator asked for.
 Order sizing is by **collateral, not shares**:
 
 ```
-quantity = floor(stake / price)   ->   cost = quantity x price = stake
+quantity = floor(stake / limitPrice)   ->   worst case cost = stake
 ```
 
-Every order therefore risks exactly the configured stake regardless of price. A
-bet at 17c and a bet at 83c both put the same amount at risk; they differ in how
-many shares that buys and therefore in the payout, not in the downside. This is
-worth stating plainly because the intuition that "longshots are riskier" is
-false under flat-collateral sizing, and we reasoned from that wrong intuition
-once before checking.
+The stake is therefore a **ceiling** on what an order can cost, not the amount
+it will cost. A directional order is marketable: it crosses the book and fills
+against whatever is resting, which is by definition at or better than its limit.
+An order carrying a 97c limit has been observed filling at an average of 76c,
+and one carrying a 50c limit filling at 2c.
 
-Measured across every order one bot placed: cost landed on 50.00 tUSDC to the
-cent, on all six, at prices from 17c to 82c. That is the check that the sizing
-and the price convention are both right.
+This distinction matters more than it looks, and section 8.5 records what it
+cost us to learn.
 
 ### 2.3 Selling does not work here
 
@@ -274,8 +272,8 @@ expectation, declined.
 ### 6.2 Does it improve results?
 
 **On current evidence, no — and the evidence is far too thin to say otherwise.**
-The complete settled record of the AI bot at time of writing is six orders, two
-of five settled windows won, net −47.07 tUSDC. Nothing can be concluded from
+The complete settled record of the AI bot at time of writing is a handful of
+orders across a few settled windows. Nothing can be concluded from
 six trades on an instrument whose true win rate is near 50%. Any claim that the
 floor helps or hurts would be noise dressed as a finding.
 
@@ -418,15 +416,13 @@ three different pages.
 
 It was caught by a consistency check rather than by inspection: reconstructed
 costs did not land on the configured stake. Once the price was inverted for NO
-legs, all six orders came out at exactly 50.00 — the stake, to the cent.
+legs, all six orders came out at exactly 50.00.
 
 **Lesson: a wrong number that is merely plausible survives review. Find an
-invariant it must satisfy and test that instead.** Here the invariant was
-`cost == stake`, which the sizing rule guarantees.
+invariant it must satisfy and test that instead.**
 
-With prices corrected, each filled order can carry its own result: a winning
-share redeems at 1.00, so a buy at price *p* makes `(1 − p)` a share and
-otherwise loses the `p` it paid.
+That lesson holds. The specific invariant we chose did not, and section 8.5 is
+about why.
 
 ### 8.4 Every trade was billed twice
 
@@ -447,14 +443,60 @@ have stopped that bot at 20.
 **Lesson: a counter that drifts non-deterministically is usually two writers,
 and an off-by-a-restart is a write-ordering tell.**
 
-### 8.5 Minted sets are not calls
+### 8.5 The invariant that proved itself
+
+The check in 8.3 — "every order's cost lands on the configured stake" — is
+worthless. Quantity is *derived* as `stake / limitPrice`, so `quantity x
+limitPrice == stake` is true by construction, for any price convention, whether
+or not it describes reality. It was arithmetic restating its own premise.
+
+It did confirm the YES/NO inversion, because only the correct complement makes
+the identity hold in the leg's own terms. But it was then used to support a
+second, false claim: that the limit price was the price paid.
+
+It is not. A directional order takes, and takes at the resting price:
+
+| Limit | Actually paid | Order |
+|---|---|---|
+| 97c | **76c** | ETH up |
+| 94c | **58c** | BTC up |
+| 55c | **32c** | BTC up |
+| 50c | **2c** | ETH up |
+
+Every result computed from the limit was therefore wrong in a consistent
+direction: **losses overstated, wins understated.** One order reported as
+winning 1.55 had actually made 12.52; one reported as losing 50.00 had lost
+30.90. Across the settled record the sign flipped — a reported net of −47.07 was
+in truth **+54.96**.
+
+The fix is to price each order from its own fills. The venue's `Fill` records
+carry `makerOrderId`, `takerOrderId` and the quote value, so cost is attributable
+exactly rather than estimated:
+
+```
+cost  = sum over fills of (BUY_YES ? quoteValue : shares - quoteValue)
+price = cost / shares
+pnl   = won ? shares - cost : -cost
+```
+
+The limit price is still reported, and it is still the right number for the
+escrow on an order that has not filled — that *is* what it would pay. It is
+simply not what a filled order paid.
+
+**Lesson: an invariant derived from the same expression it is testing proves
+nothing.** A real check has to come from an independent source. Here that source
+was the fill records, which are what the venue actually charged, and which we
+had been reading all along for the portfolio without connecting them to the
+order rows.
+
+### 8.6 Minted sets are not calls
 
 Holding both legs of a market is break-even by construction. Scoring it as one
 win and one loss inflated every trader's settled count and pushed every win rate
 toward 50%, which made the leaderboard nearly uniform. Complete sets are now
 excluded from the record and counted only toward volume.
 
-### 8.6 Orders on settled markets read as "Open"
+### 8.7 Orders on settled markets read as "Open"
 
 The indexer never transitions a resting order once its market finalizes. Nothing
 can fill there, so reporting it as working is false. Status is now derived from
@@ -563,7 +605,9 @@ Stated plainly, because a paper that only lists strengths is not useful.
 
 Derived from section 8; each one caught or would have caught a shipped defect.
 
-1. `filled x pricePaid == configured stake`, for every order.
+1. An order's cost must come from its fills, never from its limit price. The
+   limit bounds the cost; it does not state it. (See 8.5 — the version of this
+   invariant that referenced the limit was circular and proved nothing.)
 2. A claimed winner must still appear in the portfolio after its balance is zero.
 3. A position holding both legs must score as neither a win nor a loss.
 4. The daily trade counter must equal the number of orders the venue holds for
