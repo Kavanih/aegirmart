@@ -330,20 +330,51 @@ Three mechanisms manage it:
 1. **Lane restriction.** The tracker reads the five-minute lane only. Spending
    an allowance on sixty-second windows buys an answer that arrives after the
    window it describes has moved on.
-2. **Pacing.** The tracker is held to 60% of the allowance and to the pace of
-   the day, so an unattended server covers markets steadily instead of spending
-   the day's budget in its first minutes. The remaining 40% is reserved for
-   requests a person is actually waiting on.
+2. **Demand-driven reads.** Nothing is read speculatively. The tracker reads
+   only windows that a *running* AI bot wants — matching asset, eligible lane —
+   and charges the read to that bot's own daily allowance. A bot that is
+   switched off, or out of allowance, generates no spend at all.
 3. **Shared reads.** A read requested by hand is written to the same store the
    tracker and the bots use. It counts on the scoreboard, a bot can act on it,
    and nobody spends the allowance twice for the same answer.
 
-The pacing has a consequence worth stating: 60% of 50 spread across 24 hours is
-**one read every 48 minutes**. A bot watching for a trade will sit idle for long
-stretches, and that idleness is the pacer, not the strategy. Diagnosing this
-took longer than it should have because a paced-out tracker is silent.
+### 7.1 Why pacing was removed
 
-This is the clearest argument for paid model access in the product's economics.
+An earlier design spread the allowance evenly across the day: 60% of the budget,
+released in proportion to elapsed UTC time. The arithmetic works out to **one
+read every 48 minutes**, which is not coverage of a five-minute window in any
+useful sense.
+
+The deeper problem was diagnostic. A paced-out tracker is *silent* — it declines
+to spend and logs nothing — so an operator watching a bot sit idle cannot
+distinguish a working system from a broken one. We spent real time chasing a
+strategy question that was actually a budget question.
+
+The replacement puts the throttle where the operator can see it: **the on/off
+switch on the bot is the spend control.** This is legible, immediate, and
+matches the mental model people already have. Verified after the change: all
+bots paused, sixty seconds elapsed, zero requests spent.
+
+### 7.2 Budgeting bots in reads
+
+An AI bot is configured with a **daily read allowance**, not a daily trade cap.
+Reads are what binds — a bot cannot trade a window it has not read — so a trade
+ceiling on an AI bot constrains the wrong resource.
+
+| Tier | Model reads / day |
+|---|---|
+| Free | none (no AI bots) |
+| Starter | 20 |
+| Pro | 50 |
+
+The ceiling is enforced on save and again at the moment of spend.
+
+One honest caveat: the free model allowance in this section is **per upstream
+account, not per user**. A single Pro operator at 50 reads a day consumes the
+entire daily budget on their own. The per-tier numbers are therefore a fair
+sharing rule for a testnet deployment, not a capacity guarantee. Paid model
+access is what makes them one, which is the clearest argument for it in the
+product's economics.
 
 ---
 
@@ -452,19 +483,20 @@ showing a trade count beside an empty table.
 
 ## 10. Economics
 
-| Tier | Price | Bots | Running at once | Trades/day | Strategies |
-|---|---|---|---|---|---|
-| Free | — | 3 | 1 | — | Market maker |
-| Starter | 15 tUSDC/mo | 10 | 3 | 50 | + Quant, AI (free models) |
-| Pro | 30 tUSDC/mo | 10 | 5 | uncapped | + paid models |
+| Tier | Price | Bots | Running at once | Trades/day | Reads/day | Strategies |
+|---|---|---|---|---|---|---|
+| Free | — | 3 | 1 | — | — | Market maker |
+| Starter | 15 tUSDC/mo | 10 | 3 | 50 | 20 | + Quant, AI (free models) |
+| Pro | 30 tUSDC/mo | 10 | 5 | uncapped | 50 | + paid models |
 
 Yearly billing discounts 10% on Starter and 15% on Pro. Payment is an ERC20
 transfer to the treasury, verified by reading the Transfer log on chain before
 the plan is granted.
 
 The tier split follows the constraint in section 7 rather than being arbitrary:
-the thing Pro actually buys is escape from the 50-request daily ceiling, which
-is the binding limit on the AI strategy.
+the thing Pro actually buys is a larger share of the model read budget, and
+eventually escape from it entirely. Reads are the binding limit on the AI
+strategy, so reads are what the tiers meter.
 
 A platform fee of 1% per trade is specified and not yet implemented. The venue
 supports it natively through a builder address and fee parameter on order
