@@ -276,9 +276,11 @@ export async function predict(
   try {
     // Measured latency and reliability decide the order, not a static list.
     models = orderByPerformance(await freeModels()).slice(0, MAX_MODELS_PER_PREDICTION);
-    // The operator's choice leads; the ranked list stays behind it as fallback,
-    // so naming a model cannot leave a window unread when that model is down.
-    if (preferred) models = [preferred, ...models.filter((m) => m !== preferred)];
+    // The operator's choice leads, and gets a second attempt at the back of the
+    // queue. Providers answer "temporarily overloaded" often enough that one
+    // refusal is not evidence the model is unavailable, and the alternative is
+    // silently reading with a model the operator did not choose.
+    if (preferred) models = [preferred, ...models.filter((m) => m !== preferred), preferred];
   } catch (err) {
     return { status: "unavailable", reason: (err as Error).message };
   }

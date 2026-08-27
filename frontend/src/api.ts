@@ -350,7 +350,8 @@ export type MarketTrade = {
 
 export type MarketRead = {
   probability: number;
-  side: "up" | "down";
+  /** "none" when the read was too close to a coin flip to call a direction. */
+  side: "up" | "down" | "none";
   confidence: "low" | "medium" | "high";
   reasoning: string;
   model: string;
@@ -504,7 +505,8 @@ export type PredictionRecord = {
   strike: number;
   expiry: number;
   probability: number;
-  side: "up" | "down";
+  /** "none" when the read was too close to a coin flip to call a direction. */
+  side: "up" | "down" | "none";
   confidence: "low" | "medium" | "high";
   reasoning: string;
   model: string;

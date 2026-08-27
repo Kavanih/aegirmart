@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { liveMarkets, settledOutcomes, type Market } from "./markets.js";
 import { buildEvidence } from "./quant.js";
 import { predict, quotaBlockedFor } from "./openrouter.js";
+import { noteOutcome } from "./modelStats.js";
 import { claimTrackerSpend, budgetStatus } from "./budget.js";
 import { runningBots, claimBotRead, AI_MIN_INTERVAL } from "./bots.js";
 
@@ -10,6 +11,8 @@ const MAX_RECORDS = 100;
 const POLL_MS = 15_000;
 // Bound the work per tick so a slow model cannot stall the next sweep.
 const MAX_PER_TICK = 2;
+/** How far from a coin flip a read must sit to count as a call. */
+const MIN_VIEW = Number(process.env.MIN_VIEW ?? 0.05);
 /**
  * Which windows to read. A read costs one call from a fixed daily allowance
  * and takes tens of seconds, so the sixty second lane spends the budget on
@@ -29,7 +32,12 @@ export type PredictionRecord = {
   expiry: number;
   /** The model's probability that the up side resolves true. */
   probability: number;
-  side: "up" | "down";
+  /**
+   * The call. "none" when the model answered close enough to a coin flip that
+   * it made no call at all, which is not a prediction and must not be scored
+   * as one.
+   */
+  side: "up" | "down" | "none";
   confidence: "low" | "medium" | "high";
   reasoning: string;
   model: string;
@@ -49,6 +57,9 @@ export type ModelScore = {
 };
 
 let records: PredictionRecord[] = load();
+// Replay what is already scored, so ranking starts from the whole record
+// rather than only from windows that settle after this process started.
+for (const r of records) if (r.correct !== null) noteOutcome(r.model, r.correct);
 // Guards against a second tick re-requesting a market still being predicted.
 const inFlight = new Set<string>();
 // Without backoff the same uncovered market is retried every tick and eats the
@@ -154,7 +165,7 @@ export function recordRead(
     strike: market.strike,
     expiry: market.expiry,
     probability: prediction.probability,
-    side: prediction.probability >= 0.5 ? "up" : "down",
+    side: callOf(prediction.probability),
     confidence: prediction.confidence,
     reasoning: prediction.reasoning,
     model,
@@ -165,6 +176,18 @@ export function recordRead(
 
   if (records.length > MAX_RECORDS) records = records.slice(0, MAX_RECORDS);
   persist();
+}
+
+/**
+ * The direction a read actually calls.
+ *
+ * Reading `p >= 0.5` as "up" turned every 0.50 into an up call, which then
+ * scored as a hit whenever the market happened to rise. Fourteen of sixty reads
+ * were exactly 0.50, so the scoreboard was substantially measuring coin flips.
+ */
+function callOf(probability: number): "up" | "down" | "none" {
+  if (Math.abs(probability - 0.5) < MIN_VIEW) return "none";
+  return probability > 0.5 ? "up" : "down";
 }
 
 async function predictMarket(market: Market, apiKey: string, preferred?: string | null): Promise<void> {
@@ -182,7 +205,7 @@ async function predictMarket(market: Market, apiKey: string, preferred?: string 
     strike: market.strike,
     expiry: market.expiry,
     probability: result.prediction.probability,
-    side: result.prediction.probability >= 0.5 ? "up" : "down",
+    side: callOf(result.prediction.probability),
     confidence: result.prediction.confidence,
     reasoning: result.prediction.reasoning,
     model: result.model,
@@ -197,7 +220,9 @@ async function predictMarket(market: Market, apiKey: string, preferred?: string 
 }
 
 async function scorePending(): Promise<void> {
-  const unscored = records.filter((r) => r.correct === null && r.expiry < Math.floor(Date.now() / 1000));
+  const unscored = records.filter(
+    (r) => r.correct === null && r.side !== "none" && r.expiry < Math.floor(Date.now() / 1000),
+  );
   if (unscored.length === 0) return;
 
   const outcomes = await settledOutcomes(unscored.map((r) => r.marketId));
@@ -206,9 +231,14 @@ async function scorePending(): Promise<void> {
   for (const record of unscored) {
     const winning = outcomes.get(record.marketId);
     if (winning === undefined) continue;
+    // A read that made no call cannot be right or wrong about direction.
+    if (record.side === "none") continue;
     // outcomeIndex 0 is the YES/up leg, verified against tokenId.
     record.outcome = winning === 0 ? "up" : "down";
     record.correct = record.side === record.outcome;
+    // Feed the result back into model selection. Without this the fallback
+    // order was decided by speed alone, and being fast is not being right.
+    noteOutcome(record.model, record.correct);
     changed = true;
   }
 

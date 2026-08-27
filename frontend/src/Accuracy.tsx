@@ -246,7 +246,11 @@ export function Accuracy() {
                   </span>
                 </td>
                 <td>
-                  <span className={`pos-side ${r.side}`}>{r.side.toUpperCase()}</span>
+                  {r.side === "none" ? (
+                    <span className="muted-cell">no call</span>
+                  ) : (
+                    <span className={`pos-side ${r.side}`}>{r.side.toUpperCase()}</span>
+                  )}
                   <span className="prob-cell">{Math.round(r.probability * 100)}%</span>
                 </td>
                 <td className="num muted-cell">{r.confidence}</td>
@@ -254,7 +258,7 @@ export function Accuracy() {
                   {r.outcome ? <span className={`pos-side ${r.outcome}`}>{r.outcome.toUpperCase()}</span> : <span className="muted-cell">pending</span>}
                 </td>
                 <td className={`num pos-result ${r.correct === null ? "open" : r.correct ? "win" : "loss"}`}>
-                  {r.correct === null ? "--" : r.correct ? "Hit" : "Miss"}
+                  {r.side === "none" ? "not scored" : r.correct === null ? "--" : r.correct ? "Hit" : "Miss"}
                 </td>
                 <td className="model-cell">{shortModel(r.model)}</td>
                 <td className="num muted-cell">{when(r.predictedAt)}</td>
@@ -264,6 +268,19 @@ export function Accuracy() {
         </table>
         </TableScroll>
       )}
+
+      <p className="footnote">
+        A read within five cents of a coin flip makes <strong>no call</strong> and is not scored. Counting those as an
+        up call meant a model was credited with a hit every time the market happened to rise, which flattered every
+        score on this page.
+      </p>
+
+      <p className="footnote">
+        <strong>A hit here does not mean a bot made money.</strong> This table scores the model's view of the outcome.
+        A bot trades the gap between that view and the price, so when the other leg is the cheap one it buys the side
+        the model did not call — and then a correct model and a losing trade are the same window. Bot results live on
+        the bot's own page.
+      </p>
     </div>
   );
 }
