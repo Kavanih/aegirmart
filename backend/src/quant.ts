@@ -1,14 +1,15 @@
-import { spotSeries, settledHistory } from "./markets.js";
+import { strikeSeries, settledHistory } from "./markets.js";
 
 const SECONDS_PER_YEAR = 365 * 24 * 60 * 60;
 
 /**
  * Oldest spot that may still be priced against.
  *
- * The venue publishes a price per settlement, so two missed settlements means
- * the feed is down rather than merely slow.
+ * A new sixty second window mints every minute, so three missed mints means the
+ * venue has stopped rather than merely lagged. Pricing a five minute contract
+ * against an hour old price is a guess wearing a probability's clothes.
  */
-const MAX_SPOT_AGE = Number(process.env.MAX_SPOT_AGE ?? 660);
+const MAX_SPOT_AGE = Number(process.env.MAX_SPOT_AGE ?? 240);
 
 // Abramowitz and Stegun 7.1.26. Accurate to ~1e-7, enough for a display probability.
 function normalCdf(x: number): number {
@@ -80,19 +81,15 @@ export async function buildEvidence(market: {
   intervalSec: number;
   lastPrice: number | null;
 }): Promise<Evidence> {
-  // Prices the venue actually settled on. Strikes cannot be used: every window
-  // here is minted at one fixed strike, so a strike series is a flat line and
-  // the digital estimate comes out at exactly 0.500 forever.
+  // The sixty second lane mints at the money every minute, so its strikes are a
+  // per-minute record of spot. The five minute window being priced keeps the
+  // strike it was minted at, and the gap between the two is the whole signal.
   const [closes, history] = await Promise.all([
-    spotSeries(market.asset, 120).catch(() => []),
+    strikeSeries(market.asset, 120).catch(() => []),
     settledHistory(market.asset, market.intervalSec, 400).catch(() => []),
   ]);
 
-  // A price is only evidence while it is current. This venue publishes spot
-  // when a market settles, so the feed stops the moment the oracle does - and
-  // it has, leaving markets finalizing with no winner at all. Pricing a five
-  // minute window against a fifty minute old price is not a view, it is a
-  // guess dressed as one, and it argued for UP at 92% while the book paid 5c.
+  // A price is only evidence while it is current.
   const latest = closes.length ? closes[closes.length - 1] : null;
   const spotAge = latest ? Math.floor(Date.now() / 1000) - latest.t : Infinity;
   if (!latest || spotAge > MAX_SPOT_AGE) {
