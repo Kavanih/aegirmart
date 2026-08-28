@@ -21,7 +21,6 @@ import { placeQuote } from "./chain.js";
 const CYCLE_MS = Number(process.env.RUNNER_CYCLE_MS ?? 20_000);
 const LANES = [60, 300];
 /** How far a price must sit from fair before a directional bot will act. */
-const MIN_EDGE = Number(process.env.MIN_EDGE ?? 0.05);
 /**
  * How far from a coin flip a read has to be before it counts as a view.
  *
@@ -33,13 +32,20 @@ const MIN_EDGE = Number(process.env.MIN_EDGE ?? 0.05);
  */
 const MIN_VIEW = Number(process.env.MIN_VIEW ?? 0.05);
 /**
- * Disagreement beyond which we believe the book over the model.
+ * Headroom over the resting offer, so the order actually crosses.
  *
- * A market pricing a leg at 2c near expiry is not mispriced, it is informed:
- * spot has left the strike behind. A read taken minutes earlier cannot see
- * that, so an enormous edge is evidence the read is stale, not a bargain.
+ * A limit set exactly at the ask misses whenever the book ticks between the
+ * decision and the write.
  */
-const MAX_EDGE = Number(process.env.MAX_EDGE ?? 0.35);
+const SLIPPAGE = Number(process.env.SLIPPAGE ?? 0.02);
+/**
+ * Most a directional bot will ever pay for a share.
+ *
+ * Not a value test: the bot buys the called side at the market. This only stops
+ * it paying so close to 1.00 that a correct call still cannot cover a wrong
+ * one, which no hit rate can survive.
+ */
+const MAX_PRICE = Number(process.env.MAX_PRICE ?? 0.9);
 /** Fraction of a window after which its read no longer describes the price. */
 const MAX_READ_AGE = Number(process.env.MAX_READ_AGE ?? 0.34);
 /** The venue's price grid, so a back off lands on a legal price. */
@@ -120,44 +126,30 @@ function makerLegs(fair: number, spread: number, bestBid: number | null, bestAsk
 }
 
 /**
- * One side, and only when the book is wrong by enough to be worth acting on.
+ * The side the read called, bought at the market.
  *
- * If YES can be bought for less than it is worth, buy YES. If YES is being bid
- * ABOVE what it is worth then NO is the cheap side, so buy that instead. Where
- * the book already agrees with fair there is no bet here, only fees.
+ * Whether the price is a bargain plays no part. The only questions are whether
+ * the read made a call at all, and which way.
  */
 function directionalLeg(fair: number, bestBid: number | null, bestAsk: number | null): Leg[] {
   // No view, no bet. Without this the bot reads its own uncertainty as edge.
   if (Math.abs(fair - 0.5) < MIN_VIEW) return [];
 
-  // Only ever back the side the model called.
+  // Back the call, at whatever the market is asking.
   //
-  // Pure value betting takes whichever leg is cheap against fair value, which
-  // means buying DOWN when the model likes UP and the book likes UP even more.
-  // That fades the model's own call, and the call is the informative part: the
-  // calls have been right 74% of the time while the trades that faded them won
-  // one of six. Disagreeing with a confident book has meant the book was right.
+  // No discount is required. Requiring one meant the bot only traded where it
+  // disagreed with the book, and disagreement turned out to be the losing half
+  // of the signal: fading the call won one trade in six while the calls
+  // themselves were right 74% of the time. Direction is the whole signal here,
+  // so the price is something to pay rather than something to wait for.
   if (fair > 0.5) {
-    if (bestAsk !== null && fair - bestAsk >= MIN_EDGE) {
-      if (fair - bestAsk > MAX_EDGE) return [];
-      return [["yes", Math.min(0.97, fair)]];
-    }
-  } else {
-    // Buying NO costs the complement of the YES bid, and is worth 1 - fair.
-    const downFair = 1 - fair;
-    const downPrice = bestBid === null ? null : 1 - bestBid;
-    if (downPrice !== null && downFair - downPrice >= MIN_EDGE) {
-      if (downFair - downPrice > MAX_EDGE) return [];
-      return [["no", Math.min(0.97, downFair)]];
-    }
+    const price = bestAsk !== null ? bestAsk + SLIPPAGE : fair;
+    return [["yes", Math.min(MAX_PRICE, price)]];
   }
-  // With no book to disagree with, back the side fair itself favours, but only
-  // when the read is decisive rather than a coin toss.
-  if (bestBid === null && bestAsk === null) {
-    if (fair >= 0.5 + MIN_EDGE) return [["yes", Math.min(0.97, fair)]];
-    if (fair <= 0.5 - MIN_EDGE) return [["no", Math.min(0.97, 1 - fair)]];
-  }
-  return [];
+  // Buying NO costs the complement of the YES bid. With no book on either
+  // side there is no offer to cross, so the read's own number is the price.
+  const downPrice = bestBid !== null ? 1 - bestBid + SLIPPAGE : 1 - fair;
+  return [["no", Math.min(MAX_PRICE, downPrice)]];
 }
 
 async function cycle(): Promise<void> {
