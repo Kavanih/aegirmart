@@ -3,7 +3,7 @@ import { liveMarkets, settledOutcomes, type Market } from "./markets.js";
 import { buildEvidence } from "./quant.js";
 import { predict, quotaBlockedFor } from "./openrouter.js";
 import { noteOutcome } from "./modelStats.js";
-import { claimTrackerSpend, budgetStatus } from "./budget.js";
+import { claimTrackerSpend, refundSpend, budgetStatus } from "./budget.js";
 import { runningBots, claimBotRead, refundBotRead, AI_MIN_INTERVAL } from "./bots.js";
 
 const STORE = new URL("../predictions.json", import.meta.url).pathname;
@@ -322,9 +322,16 @@ export function startTracker(apiKey: string): void {
             // refuses would otherwise spend a bot's whole daily budget and
             // leave it with nothing to trade on, which is exactly what a bot
             // pinned to a flaky model did: twenty reads, no predictions.
-            if (!(await predictMarket(market, apiKey, owner.model))) refundBotRead(owner.id);
-          } catch {
+            const got = await predictMarket(market, apiKey, owner.model);
+            console.log(`read ${market.asset} ${market.intervalSec}s -> ${got ? "stored" : "FAILED, refunding"}`);
+            if (!got) {
+              refundBotRead(owner.id);
+              refundSpend();
+            }
+          } catch (err) {
+            console.log(`read ${market.asset} threw: ${(err as Error).message.slice(0, 80)}, refunding`);
             refundBotRead(owner.id);
+            refundSpend();
           } finally {
             inFlight.delete(market.marketId);
           }

@@ -63,6 +63,21 @@ export function claimTrackerSpend(): boolean {
   return true;
 }
 
+/**
+ * Hand a claimed request back when nothing was served for it.
+ *
+ * The ledger exists to model the upstream daily cap, and a provider that
+ * answers "temporarily overloaded" served no completion to count. Without this
+ * a flaky model drains the day's budget on refusals. If the assumption is ever
+ * wrong the upstream 429 latch still stops us.
+ */
+export function refundSpend(): void {
+  const l = current();
+  if (l.spent <= 0) return;
+  l.spent -= 1;
+  persist();
+}
+
 /** Live requests draw on the full allowance; they are not paced. */
 export function claimLiveSpend(): boolean {
   const l = current();
