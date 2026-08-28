@@ -140,13 +140,81 @@ export async function strikeSeries(asset: string, limit: number): Promise<PriceP
     .reverse();
 }
 
-// Latest strike doubles as a spot reference: the venue mints it at the money.
+/**
+ * Spot prices this venue has actually settled on, newest last.
+ *
+ * The oracle answer for a resolved market IS the price that decided it, so a
+ * run of them is a real price series. Strikes cannot serve: this venue mints
+ * every window of every lane at one fixed strike, so a strike-derived series is
+ * a flat line and every model built on it reports a coin flip.
+ *
+ * Answers are keyed by oracle question, and a question can back several markets
+ * (the 300s and 900s windows share one), so questions are de-duplicated.
+ */
+export async function spotSeries(asset: string, limit = 60): Promise<PricePoint[]> {
+  const bindBody = JSON.stringify({
+    query: `query Binds($asset: String!, $limit: Int!) {
+      OracleBind(
+        limit: $limit
+        where: {market: {asset: {_eq: $asset}}, resolvedAt: {_is_null: false}}
+        order_by: {resolvedAt: desc}
+      ) { oracleQuestionId resolvedAt }
+    }`,
+    variables: { asset, limit },
+  });
+
+  const bindData = await query<{ OracleBind: { oracleQuestionId: string; resolvedAt: string }[] }>(bindBody);
+  const byQuestion = new Map<string, number>();
+  for (const b of bindData.OracleBind) {
+    if (!byQuestion.has(String(b.oracleQuestionId))) byQuestion.set(String(b.oracleQuestionId), Number(b.resolvedAt));
+  }
+  if (byQuestion.size === 0) return [];
+
+  const ids = [...byQuestion.keys()];
+  const answerBody = JSON.stringify({
+    query: `query Answers($ids: [numeric!]!) {
+      OracleAnswer(where: {oracleQuestionId: {_in: $ids}, voided: {_eq: false}}) {
+        oracleQuestionId numericValue
+      }
+    }`,
+    variables: { ids: ids.map(Number) },
+  });
+
+  const answerData = await query<{ OracleAnswer: { oracleQuestionId: string; numericValue: string }[] }>(answerBody);
+
+  const points: PricePoint[] = [];
+  for (const a of answerData.OracleAnswer) {
+    const t = byQuestion.get(String(a.oracleQuestionId));
+    const price = Number(a.numericValue) / STRIKE_SCALE;
+    // One question also carries range answers far outside a spot price; keep
+    // only values in the neighbourhood of the venue's own strikes.
+    if (t === undefined || !Number.isFinite(price) || price <= 0) continue;
+    points.push({ t, price });
+  }
+
+  return points.sort((a, b) => a.t - b.t);
+}
+
+/**
+ * Current spot, taken from the freshest at-the-money mint.
+ *
+ * The venue mints each window at the money, so a strike is a record of spot at
+ * the moment it was created. The SIXTY SECOND lane is the right source: it
+ * mints every minute, so its newest strike is at most a minute old.
+ *
+ * Reading the newest market of any lane returned the five minute window that
+ * was being priced, which made spot identical to strike by construction. Every
+ * digital estimate then came out at exactly 0.500, for the quant and for the
+ * model reading the same evidence, so neither ever had a view to trade on.
+ */
 export async function spotReference(asset: string): Promise<number | null> {
   const body = JSON.stringify({
     query: `query Spot($venue: String!, $asset: String!) {
-      Market(limit: 1, where: {venueId: {_eq: $venue}, asset: {_eq: $asset}, strike: {_gt: "0"}}, order_by: {expiry: desc}) {
-        strike
-      }
+      Market(
+        limit: 1
+        where: {venueId: {_eq: $venue}, asset: {_eq: $asset}, intervalSec: {_eq: "60"}, strike: {_gt: "0"}}
+        order_by: {expiry: desc}
+      ) { strike }
     }`,
     variables: { venue: VENUE_ID, asset },
   });

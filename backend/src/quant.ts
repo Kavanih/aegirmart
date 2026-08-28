@@ -1,4 +1,4 @@
-import { strikeSeries, settledHistory, spotReference } from "./markets.js";
+import { spotSeries, settledHistory } from "./markets.js";
 
 const SECONDS_PER_YEAR = 365 * 24 * 60 * 60;
 
@@ -72,13 +72,17 @@ export async function buildEvidence(market: {
   intervalSec: number;
   lastPrice: number | null;
 }): Promise<Evidence> {
-  const [closes, history, spotRef] = await Promise.all([
-    strikeSeries(market.asset, 120).catch(() => []),
+  // Prices the venue actually settled on. Strikes cannot be used: every window
+  // here is minted at one fixed strike, so a strike series is a flat line and
+  // the digital estimate comes out at exactly 0.500 forever.
+  const [closes, history] = await Promise.all([
+    spotSeries(market.asset, 120).catch(() => []),
     settledHistory(market.asset, market.intervalSec, 400).catch(() => []),
-    spotReference(market.asset).catch(() => null),
   ]);
 
-  const spot = closes.length ? closes[closes.length - 1].price : (spotRef ?? market.strike);
+  // Falling back to the strike would restate the coin flip, so say nothing
+  // instead: with no spot there is no view, and the callers treat 0.5 as none.
+  const spot = closes.length ? closes[closes.length - 1].price : market.strike;
   const vol = realisedVol(closes.map((c) => c.price), 60);
   const tauSeconds = Math.max(0, market.expiry - Math.floor(Date.now() / 1000));
 

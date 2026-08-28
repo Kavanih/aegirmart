@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { liveMarkets, settledOutcomes, type Market } from "./markets.js";
+import { liveMarkets, liveBooks, settledOutcomes, type Market } from "./markets.js";
 import { buildEvidence } from "./quant.js";
 import { predict, quotaBlockedFor } from "./openrouter.js";
 import { noteOutcome } from "./modelStats.js";
@@ -29,6 +29,31 @@ const MIN_VIEW = Number(process.env.MIN_VIEW ?? 0.05);
 const READ_AFTER = Number(process.env.READ_AFTER ?? 0.4);
 /** Seconds that must remain after a read for a bot to act on it. */
 const MIN_ACT_SECONDS = Number(process.env.MIN_ACT_SECONDS ?? 80);
+/**
+ * Skip a window when this much of the possible answer space could not trade.
+ *
+ * A directional bot buys the called side only if the price is at or below what
+ * the model says it is worth, so a call at probability p trades only when
+ * p >= ask (up) or p <= bid (down). Everything between the bid and 0.5, and
+ * between 0.5 and the ask, is a call that would be read and then declined.
+ *
+ * On a wide book that dead zone is nearly everything: an ask of 0.98 against a
+ * bid of 0.02 leaves 96% of answers unusable. Reading it spends an allowance to
+ * learn something the bot cannot act on either way.
+ */
+const MAX_DEAD = Number(process.env.MAX_DEAD ?? 0.75);
+
+/**
+ * Fraction of possible calls this book could not trade.
+ *
+ * With no resting offer on a side there is nothing to cross and the bot buys at
+ * the read's own value, so that side is always tradeable.
+ */
+function deadFraction(bestBid: number | null, bestAsk: number | null): number {
+  const deadUp = bestAsk === null ? 0 : Math.max(0, Math.min(bestAsk, 1) - 0.5);
+  const deadDown = bestBid === null ? 0 : Math.max(0, 0.5 - Math.max(bestBid, 0));
+  return deadUp + deadDown;
+}
 /**
  * Which windows to read. A read costs one call from a fixed daily allowance
  * and takes tens of seconds, so the sixty second lane spends the budget on
@@ -285,7 +310,11 @@ export function startTracker(apiKey: string): void {
         return;
       }
 
-      const markets = (await Promise.all(LANES.map((lane) => liveMarkets(lane, 5)))).flat();
+      const [markets, books] = await Promise.all([
+        Promise.all(LANES.map((lane) => liveMarkets(lane, 5))).then((rows) => rows.flat()),
+        liveBooks().catch(() => []),
+      ]);
+      const bookFor = new Map(books.map((b) => [b.marketId, b]));
       const nowSec = Math.floor(Date.now() / 1000);
       const fresh = markets
         .filter((m) => !records.some((r) => r.marketId === m.marketId) && !inFlight.has(m.marketId) && mayAttempt(m.marketId))
@@ -296,6 +325,18 @@ export function startTracker(apiKey: string): void {
           const left = m.expiry - nowSec;
           const elapsed = m.intervalSec - left;
           return elapsed >= m.intervalSec * READ_AFTER && left >= MIN_ACT_SECONDS;
+        })
+        // Priced out before the model is asked, not after. The book is already
+        // known here, so a window the bot could not act on whatever the answer
+        // is costs nothing to skip.
+        .filter((m) => {
+          const book = bookFor.get(m.marketId);
+          const dead = deadFraction(book?.bids[0]?.price ?? null, book?.asks[0]?.price ?? null);
+          if (dead > MAX_DEAD) {
+            console.log(`skip ${m.asset} ${m.intervalSec}s: ${Math.round(dead * 100)}% of calls could not trade`);
+            return false;
+          }
+          return true;
         })
         // Closest to expiry first, so a window about to leave the band is read
         // before one that still has time to wait.
