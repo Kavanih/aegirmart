@@ -3,6 +3,19 @@ import { orderByPerformance, recordSuccess, recordFailure, canCall, noteCall } f
 import { loadBlockUntil, saveBlockUntil } from "./budget.js";
 
 const MODELS_URL = "https://openrouter.ai/api/v1/models";
+/**
+ * Models this deployment refuses to read with, as comma separated substrings.
+ * Matched loosely so "laguna" bars every laguna variant and version.
+ */
+const DENIED = (process.env.MODEL_DENY ?? "")
+  .split(",")
+  .map((v) => v.trim().toLowerCase())
+  .filter(Boolean);
+
+function denied(id: string): boolean {
+  const lower = id.toLowerCase();
+  return DENIED.some((d) => lower.includes(d));
+}
 const CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 const MODEL_TTL_MS = 60 * 60 * 1000;
 // The free quota is per key, so asking more providers only wastes it.
@@ -117,7 +130,10 @@ export async function freeModels(): Promise<string[]> {
   if (!res.ok) throw new Error(`model list ${res.status}`);
   const json = (await res.json()) as { data: CatalogModel[] };
 
-  const usable = json.data.filter((m) => isFree(m) && canPredict(m));
+  // An operator can strike a provider off outright. Ranking demotes a poor
+  // model but never rules it out, and "never read with this one" is a
+  // different instruction from "prefer others".
+  const usable = json.data.filter((m) => isFree(m) && canPredict(m) && !denied(m.id));
   schemaCapable = new Set(
     usable.filter((m) => m.supported_parameters?.includes("structured_outputs")).map((m) => m.id),
   );
@@ -276,11 +292,13 @@ export async function predict(
   try {
     // Measured latency and reliability decide the order, not a static list.
     models = orderByPerformance(await freeModels()).slice(0, MAX_MODELS_PER_PREDICTION);
-    // The operator's choice leads, and gets a second attempt at the back of the
-    // queue. Providers answer "temporarily overloaded" often enough that one
-    // refusal is not evidence the model is unavailable, and the alternative is
-    // silently reading with a model the operator did not choose.
-    if (preferred) models = [preferred, ...models.filter((m) => m !== preferred), preferred];
+    // A named model is the only model. Falling back to the ranked list meant a
+    // bot configured for one provider was quietly read by another, and the
+    // operator had approved neither the substitute nor its record. It still
+    // gets two attempts, because providers answer "temporarily overloaded"
+    // often enough that one refusal is not evidence of unavailability; if both
+    // fail the window simply goes unread.
+    if (preferred) models = [preferred, preferred];
   } catch (err) {
     return { status: "unavailable", reason: (err as Error).message };
   }

@@ -112,7 +112,7 @@ body {
 .lane.on { color: var(--text); border-color: var(--hover-line); background: var(--surface-2); }
 
 .deck-wrap { flex: 1; display: flex; flex-direction: column; }
-.deck { position: relative; flex: 1; min-height: 430px; max-height: 470px; margin-top: 16px; }
+.deck { position: relative; flex: 1; min-height: 470px; max-height: 540px; margin-top: 16px; }
 
 .top-slot { position: absolute; inset: 0; touch-action: none; outline: none; }
 .top-slot:focus-visible { box-shadow: 0 0 0 2px #5b8def; border-radius: 18px; }
@@ -127,6 +127,10 @@ body {
   display: flex; flex-direction: column; gap: 12px;
   transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
+  /* The deck stacks cards absolutely at a fixed height, so anything taller
+     than the card used to spill over the panel below it rather than being
+     clipped. Expanded reasoning did exactly that. */
+  overflow: hidden;
 }
 .card.dragging { transition: none; }
 .card.conf-medium { border-top-color: var(--conf-medium); }
@@ -168,9 +172,19 @@ body {
   align-self: flex-start; background: none; border: none; color: var(--muted);
   font-size: 12px; text-decoration: underline; cursor: pointer; padding: 0;
 }
-.reasoning { font-size: 13px; color: var(--muted); }
-.reasoning p { margin: 0 0 6px; }
-.reasoning ul { margin: 0; padding-left: 16px; }
+/* Reads as its own panel, and scrolls inside the card instead of pushing the
+   card past its bounds. Long reasoning is common, so it has to be bounded. */
+.reasoning {
+  font-size: 12.5px; line-height: 1.5; color: var(--muted);
+  background: var(--surface-2, rgba(127, 127, 127, 0.06));
+  border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px;
+  max-height: 124px; overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.reasoning p { margin: 0 0 8px; }
+.reasoning ul { margin: 0; padding-left: 16px; display: grid; gap: 4px; }
+.reasoning li { line-height: 1.45; }
 
 .notice { font-size: 12px; color: var(--muted); margin: 0; }
 
