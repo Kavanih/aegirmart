@@ -269,6 +269,13 @@ body {
 
 .model-row { flex-wrap: wrap; }
 .edge { font-size: 11px; color: var(--accent); border: 1px solid #1e4750; border-radius: 999px; padding: 2px 8px; }
+
+/* The side the model expects to win, which is not the same claim as the edge
+   pill beside it and is styled to read as a call rather than as a price. */
+.model-call { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 2px 8px; border: 1px solid transparent; }
+.model-call.up { color: var(--up); border-color: color-mix(in srgb, var(--up) 40%, transparent); }
+.model-call.down { color: var(--down); border-color: color-mix(in srgb, var(--down) 40%, transparent); }
+.model-call.none { color: var(--muted); border-color: var(--line); font-weight: 500; }
 .resolution { margin-top: auto !important; font-size: 10px; color: var(--muted); margin: 0; opacity: 0.75; }
 
 /* Wallet bar and connect modal. */

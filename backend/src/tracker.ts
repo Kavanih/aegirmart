@@ -14,6 +14,22 @@ const MAX_PER_TICK = 2;
 /** How far from a coin flip a read must sit to count as a call. */
 const MIN_VIEW = Number(process.env.MIN_VIEW ?? 0.05);
 /**
+ * How far into a window to wait before reading it.
+ *
+ * At the open, spot sits on the strike and the window really is a coin flip, so
+ * the model correctly answers 0.50 and there is nothing to trade. The
+ * asymmetry only appears once spot has moved away from the strike with the
+ * clock running. Measured over the first sessions:
+ *
+ *   read at 0-20% of the window   1.5c average conviction, 16% made a call
+ *   read at 40-60% of the window  15.5c average conviction, 58% made a call
+ *
+ * The same allowance buys a usable answer roughly four times as often.
+ */
+const READ_AFTER = Number(process.env.READ_AFTER ?? 0.4);
+/** Seconds that must remain after a read for a bot to act on it. */
+const MIN_ACT_SECONDS = Number(process.env.MIN_ACT_SECONDS ?? 80);
+/**
  * Which windows to read. A read costs one call from a fixed daily allowance
  * and takes tens of seconds, so the sixty second lane spends the budget on
  * answers that arrive against a price which has already moved. Default to the
@@ -269,9 +285,19 @@ export function startTracker(apiKey: string): void {
       }
 
       const markets = (await Promise.all(LANES.map((lane) => liveMarkets(lane, 5)))).flat();
+      const nowSec = Math.floor(Date.now() / 1000);
       const fresh = markets
         .filter((m) => !records.some((r) => r.marketId === m.marketId) && !inFlight.has(m.marketId) && mayAttempt(m.marketId))
-        // Shortest window first: a 60s market goes stale before a 5 minute one.
+        // Read in the middle of the window, not at its open. Too early and the
+        // model has nothing to say; too late and there is no time left to act
+        // on what it says.
+        .filter((m) => {
+          const left = m.expiry - nowSec;
+          const elapsed = m.intervalSec - left;
+          return elapsed >= m.intervalSec * READ_AFTER && left >= MIN_ACT_SECONDS;
+        })
+        // Closest to expiry first, so a window about to leave the band is read
+        // before one that still has time to wait.
         .sort((a, b) => a.expiry - b.expiry)
         .slice(0, MAX_PER_TICK);
 
@@ -311,6 +337,6 @@ export function startTracker(apiKey: string): void {
   const { limit, remaining } = budgetStatus();
   console.log(
     `tracker running on the ${LANES.join(", ")}s lane${LANES.length > 1 ? "s" : ""}, ` +
-      `reading only for running AI bots, ${remaining}/${limit} free requests left today`,
+      `reading mid-window for running AI bots, ${remaining}/${limit} free requests left today`,
   );
 }

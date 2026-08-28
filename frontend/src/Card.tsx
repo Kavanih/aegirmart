@@ -27,6 +27,9 @@ function marketProbability(state: PredictionState, market: Market): number | nul
   return market.lastPrice;
 }
 
+/** Below this distance from a coin flip a read makes no call, as the bots read it. */
+const NO_CALL = 0.05;
+
 export function Card({ market, prediction, series, spot, swipe, now, depth, stake, book, onRead }: Props) {
   const [expanded, setExpanded] = useState(false);
 
@@ -139,6 +142,17 @@ export function Card({ market, prediction, series, spot, swipe, now, depth, stak
               <>
                 <span className="model-read">Model {cents(model_p)}</span>
                 <span className={`chip chip-${confidence}`}>{confidence}</span>
+                {/* Two different things, and they can point opposite ways: the
+                    side the model expects to win, and the side that is cheap
+                    against it. Showing only the second left a read with no
+                    answer to the question the page actually asks. */}
+                {Math.abs(model_p - 0.5) < NO_CALL ? (
+                  <span className="model-call none">No call &mdash; too close to a coin flip</span>
+                ) : (
+                  <span className={`model-call ${model_p > 0.5 ? "up" : "down"}`}>
+                    Model picks {model_p > 0.5 ? "Up" : "Down"} &middot; {Math.round((model_p > 0.5 ? model_p : 1 - model_p) * 100)}% to win
+                  </span>
+                )}
                 {edge !== null && Math.abs(edge) > 0.04 && (
                   <span className="edge">{edge > 0 ? "Up" : "Down"} looks {Math.abs(Math.round(edge * 100))}c cheap</span>
                 )}
