@@ -292,13 +292,13 @@ export async function predict(
   try {
     // Measured latency and reliability decide the order, not a static list.
     models = orderByPerformance(await freeModels()).slice(0, MAX_MODELS_PER_PREDICTION);
-    // A named model is the only model. Falling back to the ranked list meant a
-    // bot configured for one provider was quietly read by another, and the
-    // operator had approved neither the substitute nor its record. It still
-    // gets two attempts, because providers answer "temporarily overloaded"
-    // often enough that one refusal is not evidence of unavailability; if both
-    // fail the window simply goes unread.
-    if (preferred) models = [preferred, preferred];
+    // A named model leads and is retried at the back of the queue, with the
+    // ranked pool between the two attempts. Making it the ONLY model was
+    // correct while the pool held providers the operator had not approved, but
+    // it also meant one bad provider left every window unread: a model failing
+    // sixty calls in sixty three produced nothing for a whole session. The
+    // pool is the operator's approved set, so it is a safe place to land.
+    if (preferred) models = [preferred, ...models.filter((m) => m !== preferred), preferred];
   } catch (err) {
     return { status: "unavailable", reason: (err as Error).message };
   }

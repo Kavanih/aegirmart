@@ -285,12 +285,18 @@ function clean(draft: BotDraft, plan: Plan, address: string, current?: Bot): { b
 
   // Reads are what an AI bot actually spends. Anything else has no use for
   // them, so the field is fixed at zero rather than quietly carrying a value.
+  const asked = draft.dailyReads !== undefined;
   const wantedReads = Number(draft.dailyReads ?? current?.dailyReads ?? spec.dailyReads);
-  const dailyReads = kind === "ai" ? wantedReads : 0;
-  if (!Number.isFinite(dailyReads) || dailyReads < 0) return { error: "reads a day must be zero or more" };
-  if (kind === "ai" && spec.dailyReads > 0 && dailyReads > spec.dailyReads) {
+  if (!Number.isFinite(wantedReads) || wantedReads < 0) return { error: "reads a day must be zero or more" };
+  // Only refuse a value the caller is actually setting. A stored value over the
+  // ceiling - left by an earlier plan or an earlier version of this check - is
+  // clamped instead, because rejecting it made every later edit of the bot
+  // fail on a field the caller had not touched.
+  if (asked && kind === "ai" && spec.dailyReads > 0 && wantedReads > spec.dailyReads) {
     return { error: `The ${spec.name} plan allows ${spec.dailyReads} model reads a day` };
   }
+  const ceiling = spec.dailyReads > 0 ? spec.dailyReads : wantedReads;
+  const dailyReads = kind === "ai" ? Math.min(wantedReads, ceiling) : 0;
 
   const spread = Number(draft.spread ?? current?.spread ?? 0.02);
   if (!Number.isFinite(spread) || spread <= 0 || spread >= 0.5) return { error: "spread must be between 0 and 0.5" };
