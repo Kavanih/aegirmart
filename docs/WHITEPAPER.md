@@ -217,7 +217,18 @@ confidence and a short reasoning. Runs on the **five minute lane only**: a read
 takes tens of seconds, and an answer that arrives against a sixty-second window
 is an answer about a price that has already moved.
 
-Models are free-tier and ranked by their own settled record. A window with no
+Models are free-tier and ranked by their own settled record. That ranking
+originally scored only latency and success rate — how fast a model answers and
+how often it answers at all — with no term for whether it was ever right, so the
+quickest model led regardless of accuracy. Accuracy now leads and speed breaks
+near ties, with small samples pulled toward a coin flip so two lucky calls
+cannot top the table.
+
+A bot may name its model, which is then tried first and given a second attempt
+at the back of the queue. Free providers answer "temporarily overloaded" often
+enough that one refusal should not silently hand the read to a model the
+operator did not choose: the preferred model here was failing 19 calls in 22 and
+the reads were quietly coming from elsewhere. A window with no
 stored read is skipped rather than triggering a read on a timer — reads are a
 scarce resource, and section 7 explains how scarce.
 
@@ -532,14 +543,82 @@ was the fill records, which are what the venue actually charged, and which we
 had been reading all along for the portfolio without connecting them to the
 order rows.
 
-### 8.6 Minted sets are not calls
+### 8.6 The scoreboard was measuring luck
+
+The model scoreboard derived a call from the probability:
+
+```ts
+side = probability >= 0.5 ? "up" : "down"
+```
+
+A model answering **0.50** — "I have no view" — was therefore recorded as an
+**up call**, and credited with a hit every time the market happened to rise.
+
+That would be a rounding detail if such reads were rare. They are not. Across
+64 reads on five-minute crypto windows:
+
+| Distance from a coin flip | Reads |
+|---|---|
+| under 2c | 36 |
+| 2–5c | 11 |
+| 5–10c | 5 |
+| 10–20c | 5 |
+| 20–35c | 3 |
+| over 35c | 4 |
+
+**Only 27% of reads express a real view.** The scoreboard was mostly scoring
+coin flips, and it flattered every model on the page. One model showed 85% over
+twenty reads; excluding non-calls it has **two** real calls, one correct.
+
+The ranking then consumed that number, so the corruption propagated from the
+display into model selection.
+
+A read within `MIN_VIEW` of 0.50 is now recorded as `side: "none"`, never
+scored, and shown as "no call".
+
+**Lesson: a default that turns missing data into a value will be counted as
+data.** `>= 0.5` silently converted "don't know" into "up". The absence of an
+answer needed its own representation.
+
+### 8.7 A correct model and a losing trade are the same window
+
+The obvious reading of an accuracy page is that a more accurate model earns more
+money. On a value-trading bot that is false, and the two numbers can move in
+opposite directions by design.
+
+The scoreboard scores the model's **view of the outcome**. The bot trades the
+**gap between that view and the price**, so whenever the other leg is the cheap
+one it buys the side the model did not call. Measured over thirteen settled
+trades, five took the opposite side to the model's call, and four of those five
+were on windows the model called correctly:
+
+```
+model called   | bot bought | model scored | bot result
+BTC DOWN 49%   | UP         | Hit          | lost -37.42
+BTC UP 83%     | DOWN       | Hit          | lost  -6.84
+ETH UP 50%     | DOWN       | Hit          | lost -41.00
+BTC UP 50%     | DOWN       | Hit          | lost -42.10
+```
+
+Nothing here is malfunctioning. A value bettor *should* take the other side of
+an overpriced favourite. The defect was presentational: two different questions
+were being answered on two pages with no statement that they were different, so
+"hit" naturally read as "made money".
+
+The accuracy page now says so explicitly.
+
+**Lesson: when two screens answer different questions about the same event, the
+difference has to be written down.** Nobody infers it from the numbers, because
+the numbers agree often enough to look like they always should.
+
+### 8.8 Minted sets are not calls
 
 Holding both legs of a market is break-even by construction. Scoring it as one
 win and one loss inflated every trader's settled count and pushed every win rate
 toward 50%, which made the leaderboard nearly uniform. Complete sets are now
 excluded from the record and counted only toward volume.
 
-### 8.7 Orders on settled markets read as "Open"
+### 8.9 Orders on settled markets read as "Open"
 
 The indexer never transitions a resting order once its market finalizes. Nothing
 can fill there, so reporting it as working is false. Status is now derived from
@@ -605,14 +684,19 @@ Stated plainly, because a paper that only lists strengths is not useful.
 
 1. **No exit.** Positions cannot be closed, only held to settlement (2.3).
 2. **AI coverage under 9% of windows** on a free allowance (7).
-3. **The strategy record is too small to evaluate.** Six settled orders. Every
+3. **The model rarely has a view.** Only about a quarter of reads on
+   five-minute crypto sit more than 5c from a coin flip. When it does make a
+   call it has been right 65% of the time over 17 scored calls, which is a real
+   but modest edge on a small sample. An AI strategy on this instrument should
+   be expected to sit out most windows.
+4. **The strategy record is too small to evaluate.** Six settled orders. Every
    performance figure in this document is an illustration of the instrument, not
    evidence about the strategies.
-4. **Server-side keys** are a real custody risk, mitigated but not eliminated.
-5. **Cost basis is incomplete for minted positions**, where shares were acquired
+5. **Server-side keys** are a real custody risk, mitigated but not eliminated.
+6. **Cost basis is incomplete for minted positions**, where shares were acquired
    by minting rather than buying; a subset of historical rows remain unpriced.
-6. **The platform fee is unimplemented.**
-7. **Testnet only.** Liquidity, counterparties and faucet behaviour are not
+7. **The platform fee is unimplemented.**
+8. **Testnet only.** Liquidity, counterparties and faucet behaviour are not
    representative of a live market.
 
 ---
@@ -657,3 +741,6 @@ Derived from section 8; each one caught or would have caught a shipped defect.
    that key, that day.
 5. A finalized market with a null winner must produce no result, not a DOWN win.
 6. An order on a finalized market must never report as open.
+7. A read that expresses no view must not be scored as a directional call.
+8. A model's accuracy and a bot's P&L are different measurements; neither may be
+   presented as evidence for the other.

@@ -193,9 +193,14 @@ export function planFor(addressRaw: string): Plan {
 
 export function botsFor(addressRaw: string): PublicBot[] {
   const address = addressRaw.toLowerCase();
+  const day = utcDay();
   return Object.values(bots)
     .filter((b) => b.address === address)
     .sort((a, b) => a.createdAt - b.createdAt)
+    // Only the runner rolled the day over, so a bot that spent its allowance
+    // and was then paused showed yesterday's tally until it ran again. Report
+    // what is actually available now.
+    .map((b) => (b.tradeDay === day ? b : { ...b, tradesToday: 0, readsToday: 0, tradeDay: day }))
     .map(publicBot);
 }
 
