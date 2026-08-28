@@ -110,6 +110,16 @@ function utcDay(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Every bot holding a key, running or not.
+ *
+ * Collecting winnings is not trading. Pausing a bot stops it taking new
+ * positions; it must not strand the collateral from positions it already won.
+ */
+export function keyedBots(): Bot[] {
+  return Object.values(bots).filter((b) => b.key);
+}
+
 /** Bots that are switched on AND hold a key, so the runner can act for them. */
 export function runningBots(): Bot[] {
   const day = utcDay();

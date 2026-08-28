@@ -149,6 +149,58 @@ export async function placeQuote(privateKey: string, q: Quote): Promise<PlacedQu
   }
 }
 
+const SETTLEMENT = (process.env.SETTLEMENT_ADDRESS ??
+  "0xbF4a49e0Dfd092e5FBE8E5761064C49533e6Ed23") as Address;
+
+const settlementAbi = [
+  {
+    type: "function",
+    name: "finalizeAndRedeem",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "pool", type: "address" },
+      { name: "outcomeId", type: "uint256" },
+      { name: "amount", type: "uint256" },
+      { name: "to", type: "address" },
+    ],
+    outputs: [{ name: "collateralOut", type: "uint256" }],
+  },
+] as const;
+
+/**
+ * Turn a settled winning position back into collateral.
+ *
+ * A won position is not money until it is redeemed: the shares sit as outcome
+ * tokens and the wallet's balance never moves. A bot that only ever placed
+ * orders therefore ran itself out of collateral while winning.
+ */
+export async function redeemWin(
+  privateKey: string,
+  pool: Address,
+  outcomeId: bigint,
+  shares: number,
+): Promise<{ hash: string } | { error: string }> {
+  const account = privateKeyToAccount(privateKey as `0x${string}`);
+  const wallet = createWalletClient({ account, chain: somnia, transport: http(RPC) });
+
+  const amount = BigInt(Math.floor(shares * Number(ONE)));
+  if (amount <= 0n) return { error: "nothing to redeem" };
+
+  try {
+    const hash = await wallet.writeContract({
+      abi: settlementAbi,
+      address: SETTLEMENT,
+      functionName: "finalizeAndRedeem",
+      args: [pool, outcomeId, amount, account.address],
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status !== "success") return { error: "redeem reverted" };
+    return { hash };
+  } catch (err) {
+    return { error: revertReason(err) };
+  }
+}
+
 /**
  * A usable reason from a viem error.
  *

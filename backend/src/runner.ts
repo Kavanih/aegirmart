@@ -1,9 +1,10 @@
 import { liveMarkets, liveBooks, type Market } from "./markets.js";
-import { runningBots, openBotKey, recordBotFill, AI_MIN_INTERVAL, type Bot } from "./bots.js";
+import { runningBots, keyedBots, openBotKey, recordBotFill, AI_MIN_INTERVAL, type Bot } from "./bots.js";
 import { buildEvidence } from "./quant.js";
 import { recordBotTrade } from "./stats.js";
+import { positionsFor } from "./markets.js";
 import { cachedPrediction } from "./tracker.js";
-import { placeQuote } from "./chain.js";
+import { placeQuote, redeemWin } from "./chain.js";
 
 /**
  * Executes the bot definitions.
@@ -159,7 +160,44 @@ function directionalLeg(fair: number, bestBid: number | null, bestAsk: number | 
   return [[leg, Math.min(MAX_PRICE, worth, offer + SLIPPAGE), offer]];
 }
 
+/**
+ * Turn a bot's settled wins back into collateral.
+ *
+ * A won position is outcome tokens, not money. Left alone the wallet balance
+ * never rises, so a bot can win steadily and still run out of the collateral it
+ * needs to keep trading. Redeemed once per cycle, one position at a time, so a
+ * slow chain cannot stall the quoting loop.
+ */
+async function sweepWins(bot: Bot, key: string): Promise<void> {
+  let rows;
+  try {
+    rows = await positionsFor(bot.key!.address, 200);
+  } catch {
+    return;
+  }
+
+  const won = rows.find(
+    (p) => p.finalized && p.winningOutcome === p.outcomeIndex && p.size > 0 && p.poolAddress && p.outcomeId,
+  );
+  if (!won) return;
+
+  const result = await redeemWin(key, won.poolAddress as `0x${string}`, BigInt(won.outcomeId), won.size);
+  if ("error" in result) {
+    log(`${bot.name} redeem ${won.asset}: ${result.error}`);
+    return;
+  }
+  log(`${bot.name} redeemed ${won.size.toFixed(2)} ${won.asset} shares`);
+}
+
 async function cycle(): Promise<void> {
+  // Winnings first, for every bot that holds a key. A paused bot places no
+  // orders but its settled wins are still its money, and they only become
+  // spendable collateral once redeemed.
+  for (const bot of keyedBots()) {
+    const key = openBotKey(bot.id);
+    if (key) await sweepWins(bot, key);
+  }
+
   const bots = runningBots();
   if (bots.length === 0) return;
 
@@ -177,6 +215,7 @@ async function cycle(): Promise<void> {
   for (const bot of bots) {
     const key = openBotKey(bot.id);
     if (!key) continue;
+
 
     for (const market of markets) {
       if (!wants(bot, market)) continue;

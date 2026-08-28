@@ -299,6 +299,67 @@ motivated the conviction floor in section 6.
 
 ---
 
+## 5.6 Why the price is the probability
+
+A share pays exactly 1.00 if the call is right and nothing if it is wrong.
+Price and probability are therefore the same number in different units: a leg
+offered at 70c is the market saying "70% likely", and a model answering 70% is
+saying "this is worth 70c". The model is not appraising shares. It reads spot,
+strike, time remaining and volatility, produces a probability, and that
+probability *is* a valuation because of how the instrument settles.
+
+This makes the break-even price for any call equal to its own probability, and
+that has a consequence which is easy to state and easy to disbelieve: **being
+right most of the time does not make money if the price is wrong.**
+
+A call the model gives 70%, offered at 97.7c, staking 50:
+
+```
+  stake 50 buys 51.2 shares
+  right (70% of the time):  gain   1.18
+  wrong (30% of the time):  lose  50.00
+
+  over 100 such bets
+    70 rights x  1.18  =   +82
+    30 wrongs x 50.00  = -1500
+    net                = -1418
+```
+
+Right seventy times in a hundred and down 1418, because each loss costs
+forty-two times what a win pays. The same 68% call across prices:
+
+| Price | 68 wins pay | 32 losses cost | Net over 100 |
+|---|---|---|---|
+| 30c | +7933 | -1600 | **+6333** |
+| 50c | +3400 | -1600 | **+1800** |
+| 68c | +1600 | -1600 | 0 |
+| 80c | +850 | -1600 | -750 |
+| 90c | +378 | -1600 | -1222 |
+
+68c is the line, and it is the model's own number. Below it the call earns,
+above it the call loses however often it is right.
+
+A directional bot therefore pays **up to** what the model says the leg is
+worth, and passes anything above. This is not a demand for a discount — a price
+equal to fair value is taken. It only refuses prices the model itself has
+already called too high.
+
+## 5.7 A win is not money until it is redeemed
+
+A settled winning position is outcome tokens, not collateral. Nothing converts
+them automatically: the holder has to call `finalizeAndRedeem` on the settlement
+contract.
+
+The bots did not. They placed orders and never redeemed, so a bot could win
+steadily while its wallet balance only fell — 448.92 tUSDC of won positions sat
+unconverted across six markets, against a wallet of 463.56. It was hours from
+being unable to fund a trade despite being ahead.
+
+The runner now sweeps settled wins at the top of every cycle, before quoting, so
+the collateral is available to trade with. It does this for **every bot holding
+a key, running or paused**: pausing a bot stops it taking new positions, and
+must not strand money it has already won.
+
 ## 6. The conviction floor
 
 Operators can set a minimum probability on quant and AI bots — "only bet when
