@@ -2,6 +2,14 @@ import { spotSeries, settledHistory } from "./markets.js";
 
 const SECONDS_PER_YEAR = 365 * 24 * 60 * 60;
 
+/**
+ * Oldest spot that may still be priced against.
+ *
+ * The venue publishes a price per settlement, so two missed settlements means
+ * the feed is down rather than merely slow.
+ */
+const MAX_SPOT_AGE = Number(process.env.MAX_SPOT_AGE ?? 660);
+
 // Abramowitz and Stegun 7.1.26. Accurate to ~1e-7, enough for a display probability.
 function normalCdf(x: number): number {
   const sign = x < 0 ? -1 : 1;
@@ -80,9 +88,17 @@ export async function buildEvidence(market: {
     settledHistory(market.asset, market.intervalSec, 400).catch(() => []),
   ]);
 
-  // Falling back to the strike would restate the coin flip, so say nothing
-  // instead: with no spot there is no view, and the callers treat 0.5 as none.
-  const spot = closes.length ? closes[closes.length - 1].price : market.strike;
+  // A price is only evidence while it is current. This venue publishes spot
+  // when a market settles, so the feed stops the moment the oracle does - and
+  // it has, leaving markets finalizing with no winner at all. Pricing a five
+  // minute window against a fifty minute old price is not a view, it is a
+  // guess dressed as one, and it argued for UP at 92% while the book paid 5c.
+  const latest = closes.length ? closes[closes.length - 1] : null;
+  const spotAge = latest ? Math.floor(Date.now() / 1000) - latest.t : Infinity;
+  if (!latest || spotAge > MAX_SPOT_AGE) {
+    throw new Error(`spot is ${latest ? `${spotAge}s old` : "unavailable"}; refusing to price`);
+  }
+  const spot = latest.price;
   const vol = realisedVol(closes.map((c) => c.price), 60);
   const tauSeconds = Math.max(0, market.expiry - Math.floor(Date.now() / 1000));
 
