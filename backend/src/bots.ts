@@ -12,7 +12,6 @@ import { subscriptionFor, tierSpec, type Subscription } from "./plans.js";
  * a deliberate decision about custody, not something to slip in.
  */
 const BOTS = new URL("../bots.json", import.meta.url).pathname;
-const PLANS = new URL("../plans.json", import.meta.url).pathname;
 
 export const MAX_BOTS = 5;
 export const PRO_PRICE = 20;
@@ -93,12 +92,15 @@ for (const bot of Object.values(bots)) {
   if (typeof bot.dailyReads !== "number") bot.dailyReads = bot.kind === "ai" ? 10 : 0;
   if (typeof bot.readsToday !== "number") bot.readsToday = 0;
 }
-let plans: Record<string, Plan> = load<Plan>(PLANS);
 
 function persist(): void {
   try {
+    // Only the bots file. This module also used to write plans.json from a
+    // copy it loaded at startup and never updated, so every bot edit rolled
+    // subscriptions back to whatever they were when the process booted - a
+    // paid upgrade was destroyed by the next unrelated bot save. plans.ts owns
+    // that file; subscriptionFor is the way to read it.
     writeFileSync(BOTS, JSON.stringify(bots));
-    writeFileSync(PLANS, JSON.stringify(plans));
   } catch {
     // A lost write costs a definition, never the request in flight.
   }
