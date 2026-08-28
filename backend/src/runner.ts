@@ -130,14 +130,26 @@ function directionalLeg(fair: number, bestBid: number | null, bestAsk: number | 
   // No view, no bet. Without this the bot reads its own uncertainty as edge.
   if (Math.abs(fair - 0.5) < MIN_VIEW) return [];
 
-  if (bestAsk !== null && fair - bestAsk >= MIN_EDGE) {
-    if (fair - bestAsk > MAX_EDGE) return [];
-    return [["yes", Math.min(0.97, fair)]];
-  }
-  if (bestBid !== null && bestBid - fair >= MIN_EDGE) {
-    if (bestBid - fair > MAX_EDGE) return [];
-    // Buying NO at its own price, which is the complement of the YES bid.
-    return [["no", Math.min(0.97, 1 - fair)]];
+  // Only ever back the side the model called.
+  //
+  // Pure value betting takes whichever leg is cheap against fair value, which
+  // means buying DOWN when the model likes UP and the book likes UP even more.
+  // That fades the model's own call, and the call is the informative part: the
+  // calls have been right 74% of the time while the trades that faded them won
+  // one of six. Disagreeing with a confident book has meant the book was right.
+  if (fair > 0.5) {
+    if (bestAsk !== null && fair - bestAsk >= MIN_EDGE) {
+      if (fair - bestAsk > MAX_EDGE) return [];
+      return [["yes", Math.min(0.97, fair)]];
+    }
+  } else {
+    // Buying NO costs the complement of the YES bid, and is worth 1 - fair.
+    const downFair = 1 - fair;
+    const downPrice = bestBid === null ? null : 1 - bestBid;
+    if (downPrice !== null && downFair - downPrice >= MIN_EDGE) {
+      if (downFair - downPrice > MAX_EDGE) return [];
+      return [["no", Math.min(0.97, downFair)]];
+    }
   }
   // With no book to disagree with, back the side fair itself favours, but only
   // when the read is decisive rather than a coin toss.
