@@ -157,6 +157,14 @@ export function claimBotRead(id: string): boolean {
   return true;
 }
 
+/** Hand a read back when the provider gave nothing for it. */
+export function refundBotRead(id: string): void {
+  const bot = bots[id];
+  if (!bot || bot.readsToday <= 0) return;
+  bot.readsToday -= 1;
+  persist();
+}
+
 export function recordBotFill(id: string, marketId?: string): void {
   const bot = bots[id];
   if (!bot) return;

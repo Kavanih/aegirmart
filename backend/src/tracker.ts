@@ -4,7 +4,7 @@ import { buildEvidence } from "./quant.js";
 import { predict, quotaBlockedFor } from "./openrouter.js";
 import { noteOutcome } from "./modelStats.js";
 import { claimTrackerSpend, budgetStatus } from "./budget.js";
-import { runningBots, claimBotRead, AI_MIN_INTERVAL } from "./bots.js";
+import { runningBots, claimBotRead, refundBotRead, AI_MIN_INTERVAL } from "./bots.js";
 
 const STORE = new URL("../predictions.json", import.meta.url).pathname;
 const MAX_RECORDS = 100;
@@ -206,13 +206,13 @@ function callOf(probability: number): "up" | "down" | "none" {
   return probability > 0.5 ? "up" : "down";
 }
 
-async function predictMarket(market: Market, apiKey: string, preferred?: string | null): Promise<void> {
+async function predictMarket(market: Market, apiKey: string, preferred?: string | null): Promise<boolean> {
   const evidence = await buildEvidence(market);
   // Leave a third of the window for the card to actually show the read.
   const remainingMs = (market.expiry - Math.floor(Date.now() / 1000)) * 1000;
   const budget = Math.max(8_000, Math.min(45_000, remainingMs * 0.6));
   const result = await predict(evidence, apiKey, budget, preferred);
-  if (result.status !== "ok") return;
+  if (result.status !== "ok") return false;
 
   records.unshift({
     marketId: market.marketId,
@@ -233,6 +233,7 @@ async function predictMarket(market: Market, apiKey: string, preferred?: string 
   // Ring buffer, so the store cannot grow without bound.
   if (records.length > MAX_RECORDS) records = records.slice(0, MAX_RECORDS);
   persist();
+  return true;
 }
 
 async function scorePending(): Promise<void> {
@@ -317,9 +318,13 @@ export function startTracker(apiKey: string): void {
           inFlight.add(market.marketId);
           noteAttempt(market.marketId);
           try {
-            await predictMarket(market, apiKey, owner.model);
+            // An allowance buys a usable read, not an attempt. A provider that
+            // refuses would otherwise spend a bot's whole daily budget and
+            // leave it with nothing to trade on, which is exactly what a bot
+            // pinned to a flaky model did: twenty reads, no predictions.
+            if (!(await predictMarket(market, apiKey, owner.model))) refundBotRead(owner.id);
           } catch {
-            // Retried on a later tick; no record means not yet covered.
+            refundBotRead(owner.id);
           } finally {
             inFlight.delete(market.marketId);
           }
