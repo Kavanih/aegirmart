@@ -39,13 +39,9 @@ const MIN_VIEW = Number(process.env.MIN_VIEW ?? 0.05);
  */
 const SLIPPAGE = Number(process.env.SLIPPAGE ?? 0.02);
 /**
- * Most a directional bot will ever pay for a share.
- *
- * Not a value test: the bot buys the called side at the market. This only stops
- * it paying so close to 1.00 that a correct call still cannot cover a wrong
- * one, which no hit rate can survive.
+ * Hard ceiling on what any directional order will pay, under everything else.
  */
-const MAX_PRICE = Number(process.env.MAX_PRICE ?? 0.9);
+const MAX_PRICE = Number(process.env.MAX_PRICE ?? 0.97);
 /** Fraction of a window after which its read no longer describes the price. */
 const MAX_READ_AGE = Number(process.env.MAX_READ_AGE ?? 0.34);
 /** The venue's price grid, so a back off lands on a legal price. */
@@ -106,7 +102,14 @@ async function fairValue(bot: Bot, market: Market, mid: number | null): Promise<
   return mid ?? market.lastPrice ?? 0.5;
 }
 
-type Leg = readonly ["yes" | "no", number];
+/**
+ * A leg to buy: side, limit price, and the price to size the stake against.
+ *
+ * The limit and the sizing price differ because a taking order fills at the
+ * resting offer, not at its own limit. Sizing on the limit spent less than the
+ * operator asked for; sizing on the offer spends what they asked.
+ */
+type Leg = readonly ["yes" | "no", number, number];
 
 /**
  * A two sided quote around fair, backed off so it rests instead of crossing.
@@ -122,7 +125,7 @@ function makerLegs(fair: number, spread: number, bestBid: number | null, bestAsk
   // Backing off can invert the quote where the book is tighter than the bot's
   // spread. There is nothing to add there, so sit the market out.
   if (bid <= 0.02 || offer >= 0.98 || bid >= offer) return [];
-  return [["yes", bid], ["no", 1 - offer]];
+  return [["yes", bid, bid], ["no", 1 - offer, 1 - offer]];
 }
 
 /**
@@ -135,21 +138,25 @@ function directionalLeg(fair: number, bestBid: number | null, bestAsk: number | 
   // No view, no bet. Without this the bot reads its own uncertainty as edge.
   if (Math.abs(fair - 0.5) < MIN_VIEW) return [];
 
-  // Back the call, at whatever the market is asking.
+  // Back the call, paying up to what the model says the leg is worth.
   //
-  // No discount is required. Requiring one meant the bot only traded where it
-  // disagreed with the book, and disagreement turned out to be the losing half
-  // of the signal: fading the call won one trade in six while the calls
-  // themselves were right 74% of the time. Direction is the whole signal here,
-  // so the price is something to pay rather than something to wait for.
-  if (fair > 0.5) {
-    const price = bestAsk !== null ? bestAsk + SLIPPAGE : fair;
-    return [["yes", Math.min(MAX_PRICE, price)]];
+  // No discount is required: a price equal to fair value is taken. But a price
+  // ABOVE it cannot be, because the break-even price for a call IS its
+  // probability. Paying 90c for a leg the model gives 68% risks 90 to win 10 on
+  // something that fails a third of the time, which loses 22c a share on
+  // average however often the call is right.
+  const [leg, worth, offer] = fair > 0.5
+    ? (["yes", fair, bestAsk] as const)
+    // Buying NO costs the complement of the YES bid and is worth 1 - fair.
+    : (["no", 1 - fair, bestBid === null ? null : 1 - bestBid] as const);
+
+  // With no book there is nothing to cross, so the read's own number stands.
+  if (offer === null) {
+    const price = Math.min(MAX_PRICE, worth);
+    return [[leg, price, price]];
   }
-  // Buying NO costs the complement of the YES bid. With no book on either
-  // side there is no offer to cross, so the read's own number is the price.
-  const downPrice = bestBid !== null ? 1 - bestBid + SLIPPAGE : 1 - fair;
-  return [["no", Math.min(MAX_PRICE, downPrice)]];
+  if (offer > worth) return [];
+  return [[leg, Math.min(MAX_PRICE, worth, offer + SLIPPAGE), offer]];
 }
 
 async function cycle(): Promise<void> {
@@ -200,7 +207,7 @@ async function cycle(): Promise<void> {
       // Claim the slot before awaiting, so a slow cycle cannot double quote.
       quoted.set(mark, market.expiry);
 
-      for (const [side, price] of legs) {
+      for (const [side, price, sizeAt] of legs) {
         // Checked per ORDER, not per market. A market places two, so testing
         // once outside this loop let the cap overshoot by one every time.
         if (bot.dailyTrades > 0 && bot.tradesToday >= bot.dailyTrades) break;
@@ -210,6 +217,7 @@ async function cycle(): Promise<void> {
           collateral: market.collateral as `0x${string}`,
           side,
           price,
+          sizeAt,
           stake: bot.stake,
           expiry: market.expiry,
           // A market maker rests and never takes. A directional bot is buying

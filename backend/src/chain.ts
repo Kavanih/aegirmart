@@ -57,6 +57,13 @@ export type Quote = {
   side: "yes" | "no";
   /** Price of the leg being bought, in its own probability. */
   price: number;
+  /**
+   * Price to size the stake against, when it differs from the limit.
+   *
+   * A taking order fills at the resting offer, so sizing on the limit bought
+   * fewer shares than the stake pays for and spent less than was asked.
+   */
+  sizeAt?: number;
   /** Collateral to commit, in tUSDC. */
   stake: number;
   expiry: number;
@@ -85,7 +92,7 @@ export async function placeQuote(privateKey: string, q: Quote): Promise<PlacedQu
   const ownPrice = snap(q.price, TICK, "round");
   if (ownPrice <= 0n || ownPrice >= ONE) return { error: "price off the grid" };
 
-  const quantity = snap(q.stake / q.price, LOT, "floor");
+  const quantity = snap(q.stake / (q.sizeAt && q.sizeAt > 0 ? q.sizeAt : q.price), LOT, "floor");
   if (quantity <= 0n) return { error: "stake too small for one lot" };
 
   const escrow = (ownPrice * quantity) / ONE;
