@@ -24,11 +24,17 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
   const [stats, setStats] = useState<BotStats | null>(null);
   const [keyChanged, setKeyChanged] = useState(false);
   const [missing, setMissing] = useState(false);
+  const [stale, setStale] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!address) return;
-    fetchBotActivity(address, botId).then((d) => {
-      if (!d) return setMissing(true);
+    fetchBotActivity(address, botId).then((res) => {
+      // A failed poll is not a deleted bot. Keep what is on screen and say the
+      // refresh failed, rather than telling someone their running bot is gone.
+      if (res.status === "error") return setStale(res.reason);
+      if (res.status === "missing") return setMissing(true);
+      const d = res.data;
+      setStale(null);
       setBot(d.bot);
       setOrders(d.orders);
       setSummary(d.summary);
@@ -158,6 +164,12 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
         </p>
       )}
 
+      {stale && (
+        <p className="banner offline">
+          Could not refresh just now ({stale}). Showing the last figures loaded; this page retries every ten seconds.
+        </p>
+      )}
+
       {keyChanged && (
         <p className="banner offline">
           This bot has a record of trades, but none belong to the key it holds now. Orders stay with the key that
@@ -166,10 +178,25 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
       )}
 
       <h3 className="section-head">Orders</h3>
+      {/* The counter moves the moment an order is written; the table comes from
+          the indexer, which is seconds behind. Saying so beats showing a count
+          beside an empty table and letting it read as a contradiction. */}
+      {bot.tradesToday > orders.length && (
+        <p className="footnote">
+          {bot.tradesToday - orders.length} of today&rsquo;s {bot.tradesToday} orders have not reached the indexer yet.
+          The count is written when an order is placed, the table when the venue reports it.
+        </p>
+      )}
       {orders.length === 0 ? (
         <EmptyState
-          title="Nothing placed yet"
-          hint={bot.status === "running" ? "The runner quotes on its next cycle." : "This bot is paused."}
+          title={bot.tradesToday > 0 ? "Waiting on the indexer" : "Nothing placed yet"}
+          hint={
+            bot.tradesToday > 0
+              ? "Orders have been placed today but the venue has not reported them yet."
+              : bot.status === "running"
+                ? "The runner quotes on its next cycle."
+                : "This bot is paused."
+          }
         />
       ) : (
         <TableScroll label="Bot orders">

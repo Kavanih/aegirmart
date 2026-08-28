@@ -243,17 +243,37 @@ export type BotStats = {
   unpriced: number;
 };
 
-export async function fetchBotActivity(address: string, id: string): Promise<{
+export type BotActivity = {
   bot: Bot;
   orders: OrderRow[];
   summary: BotSummary | null;
   stats: BotStats | null;
   keyChanged: boolean;
   recordedMarkets: number;
-} | null> {
-  const res = await fetch(`/api/bots/${id}/activity?address=${address}`);
-  if (!res.ok) return null;
-  return await res.json();
+};
+
+/**
+ * Three outcomes, not two.
+ *
+ * Treating every failure as "no bot" told people their bot had been deleted
+ * whenever the indexer blinked or the server restarted under them. Only a 404
+ * means gone; anything else is this request failing, and the page should keep
+ * showing what it already had.
+ */
+export type BotActivityResult =
+  | { status: "ok"; data: BotActivity }
+  | { status: "missing" }
+  | { status: "error"; reason: string };
+
+export async function fetchBotActivity(address: string, id: string): Promise<BotActivityResult> {
+  try {
+    const res = await fetch(`/api/bots/${id}/activity?address=${address}`);
+    if (res.status === 404) return { status: "missing" };
+    if (!res.ok) return { status: "error", reason: `server returned ${res.status}` };
+    return { status: "ok", data: (await res.json()) as BotActivity };
+  } catch {
+    return { status: "error", reason: "could not reach the server" };
+  }
 }
 
 export type Plan = Subscription;
