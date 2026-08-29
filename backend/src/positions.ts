@@ -41,8 +41,14 @@ export async function pricedPositionsFor(address: string) {
     // Prefer what was actually redeemed. It is the only figure that survives
     // the claim, so P&L no longer moves when somebody collects.
     const shares = p.size > 0 ? p.size : paid?.burned ?? entry?.shares ?? 0;
-    const won = p.finalized && p.winningOutcome === p.outcomeIndex;
-    const payout = paid ? paid.collateralOut : p.finalized ? (won ? shares : 0) : null;
+    // Finalized is not resolved. This venue leaves markets finalized with no
+    // winning outcome when its oracle misses them, and twenty such markets were
+    // being scored as twenty losses - inventing 654 tUSDC of P&L that never
+    // happened. A market with no winner has no result, exactly as an open one
+    // has none.
+    const resolved = p.finalized && p.winningOutcome !== null;
+    const won = resolved && p.winningOutcome === p.outcomeIndex;
+    const payout = paid ? paid.collateralOut : resolved ? (won ? shares : 0) : null;
 
     const legs = held.get(p.marketId);
     const other = legs ? legs.get(p.outcomeIndex === 0 ? 1 : 0) ?? 0 : 0;
@@ -62,8 +68,11 @@ export async function pricedPositionsFor(address: string) {
 
     return {
       ...p,
+      // Overrides the raw flag deliberately: everything downstream reads
+      // "finalized" as "has a result", and a market with no winner has none.
+      finalized: resolved,
       shares,
-      won: p.finalized ? won : null,
+      won: resolved ? won : null,
       pairedShares,
       mintedShares,
       /**

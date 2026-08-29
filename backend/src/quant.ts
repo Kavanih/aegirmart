@@ -29,9 +29,24 @@ const MAX_SPOT_AGE = Number(process.env.MAX_SPOT_AGE ?? 240);
  */
 const CONFIDENCE_GAIN = Number(process.env.CONFIDENCE_GAIN ?? 1.8);
 
-/** Stretch a probability away from 0.5, keeping it a probability. */
+/**
+ * Most confidence the backtest actually measured.
+ *
+ * The calibration buckets stop at 65-80%; above that there is no evidence at
+ * all, so a stretched estimate of 0.98 is extrapolation wearing a measurement's
+ * clothes. It matters because the bot pays up to what it claims a leg is worth:
+ * claiming 98% licenses paying 91c, and if the truth up there is nearer 85%
+ * that trade loses 3.50 every time it fires.
+ *
+ * Capped at the top of the measured range. The bot may still be very confident;
+ * it may not act on more confidence than has been checked.
+ */
+const MAX_CONFIDENCE = Number(process.env.MAX_CONFIDENCE ?? 0.85);
+
+/** Stretch a probability away from 0.5, without claiming more than was measured. */
 export function calibrate(p: number, gain = CONFIDENCE_GAIN): number {
-  return Math.min(0.98, Math.max(0.02, 0.5 + (p - 0.5) * gain));
+  const stretched = 0.5 + (p - 0.5) * gain;
+  return Math.min(MAX_CONFIDENCE, Math.max(1 - MAX_CONFIDENCE, stretched));
 }
 
 // Abramowitz and Stegun 7.1.26. Accurate to ~1e-7, enough for a display probability.

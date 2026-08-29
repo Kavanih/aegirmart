@@ -14,7 +14,7 @@ for (const m of markets.slice(0, 2)) {
   const offer = up ? ask : (bid === null ? null : 1 - bid);
   let v;
   if (Math.abs(p - 0.5) < 0.05) v = "sit out - no call";
-  else if (offer === null) v = `BUY ${up ? "UP" : "DOWN"} at own value ${worth.toFixed(3)}`;
+  else if (offer === null) v = `sit out - no offer to cross`;
   else if (offer > worth) v = `sit out - costs ${offer.toFixed(3)}, worth ${worth.toFixed(3)}`;
   else v = `>>> BUY ${up ? "UP" : "DOWN"} at ${offer.toFixed(3)}, worth ${worth.toFixed(3)}`;
   console.log(`  ${m.asset} ${m.expiry - now}s left | quant p=${p.toFixed(3)} | bid=${bid} ask=${ask} -> ${v}`);

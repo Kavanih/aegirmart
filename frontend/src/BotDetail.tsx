@@ -120,19 +120,27 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
         />
         <Stat label="Settled" value={stats ? String(stats.settled) : "--"} />
         <Stat label="Trades today" value={capped ? `${bot.tradesToday}/${bot.dailyTrades}` : String(bot.tradesToday)} />
-        {bot.kind === "ai" ? (
+        {/* Only an AI bot spends a model allowance. For the others the trade
+            count above already carries the cap, and a second tile restating it
+            as "allowance left" read as a separate AI budget they do not have. */}
+        {bot.kind === "ai" && (
           <Stat
             label="Reads today"
             value={`${bot.readsToday}/${bot.dailyReads}`}
             tone={bot.dailyReads > 0 && bot.readsToday >= bot.dailyReads ? "bad" : undefined}
           />
-        ) : (
-          <Stat
-            label="Allowance left"
-            value={left === null ? "no cap" : String(left)}
-            tone={left !== null && left === 0 ? "bad" : undefined}
-          />
         )}
+        <Stat
+          label="Trades left"
+          value={
+            funds.affordable !== null && (left === null || funds.affordable < left)
+              ? `${funds.affordable} (funded)`
+              : left === null
+                ? "no cap"
+                : String(left)
+          }
+          tone={funds.affordable === 0 || left === 0 ? "bad" : undefined}
+        />
       </div>
 
       <div className="stat-grid">
