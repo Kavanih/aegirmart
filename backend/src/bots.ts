@@ -271,7 +271,7 @@ type BotFields = Pick<
 
 function clean(draft: BotDraft, plan: Plan, address: string, current?: Bot): { bot: BotFields } | { error: string } {
   const kind = draft.kind ?? current?.kind ?? "standard";
-  if (!KINDS.includes(kind)) return { error: "kind must be standard or ai" };
+  if (!KINDS.includes(kind)) return { error: `kind must be one of ${KINDS.join(", ")}` };
   const spec = tierSpec(plan.plan);
   if (kind !== "standard" && !spec.strategyBots) {
     return { error: `${kind === "ai" ? "An AI" : "A quant"} bot needs the Starter plan or better` };

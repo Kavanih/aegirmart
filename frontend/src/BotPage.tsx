@@ -29,6 +29,8 @@ export function BotPage() {
   const [books, setBooks] = useState<MarketBook[]>([]);
   const [editing, setEditing] = useState<Bot | null>(null);
   const [open, setOpen] = useState(false);
+  /** Bumped on every save, so an open detail page refreshes at once. */
+  const [saved, setSaved] = useState(0);
 
   const load = useCallback(() => {
     if (!address) return;
@@ -71,20 +73,46 @@ export function BotPage() {
     return <EmptyState title="Connect a wallet" hint="Bots are stored against the account that owns them." />;
   }
 
+  // Built once and rendered in BOTH branches. It used to live only after the
+  // detail page's early return, so pressing Edit there set the state and
+  // rendered nothing: the button looked dead.
+  const editor = open && plan && limits && (
+    <BotForm
+      address={address}
+      plan={plan}
+      proPrice={limits.proPrice}
+      readCeiling={limits.dailyReads}
+      keyStorage={limits.keyStorage}
+      editing={editing}
+      onClose={() => setOpen(false)}
+      onSaved={() => {
+        setOpen(false);
+        setSaved(Date.now());
+        load();
+      }}
+    />
+  );
+
   if (openBotId) {
     return (
-      <BotDetail
-        botId={openBotId}
-        onBack={() => {
-          setOpenBotId(null);
-          window.history.replaceState(null, "", "#/bot");
-          load();
-        }}
-        onEdit={(bot) => {
-          setEditing(bot);
-          setOpen(true);
-        }}
-      />
+      <>
+        <BotDetail
+          botId={openBotId}
+          // Changes the key so the detail page remounts and shows the edit
+          // immediately, rather than waiting for its ten second poll.
+          key={`${openBotId}:${saved}`}
+          onBack={() => {
+            setOpenBotId(null);
+            window.history.replaceState(null, "", "#/bot");
+            load();
+          }}
+          onEdit={(bot) => {
+            setEditing(bot);
+            setOpen(true);
+          }}
+        />
+        {editor}
+      </>
     );
   }
 
@@ -227,21 +255,7 @@ export function BotPage() {
         </div>
       )}
 
-      {open && plan && limits && (
-        <BotForm
-          address={address}
-          plan={plan}
-          proPrice={limits.proPrice}
-          readCeiling={limits.dailyReads}
-          keyStorage={limits.keyStorage}
-          editing={editing}
-          onClose={() => setOpen(false)}
-          onSaved={() => {
-            setOpen(false);
-            load();
-          }}
-        />
-      )}
+      {editor}
 
       {bots && limits && (
         <p className="footnote page-foot">
