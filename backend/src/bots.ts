@@ -19,6 +19,16 @@ export const ASSETS = ["BTC", "ETH", "BOTH"] as const;
 export const KINDS = ["standard", "quant", "ai"] as const;
 /** A model read takes tens of seconds, which a sixty second window cannot wait for. */
 export const AI_MIN_INTERVAL = 300;
+/**
+ * Shortest window a quant bot can price.
+ *
+ * Spot comes from the sixty second lane's at-the-money mints, one price a
+ * minute. A sixty second window is exactly one tick of that tape long, so spot
+ * cannot move inside it: the estimate is 0.500 for the whole window, or worse,
+ * it catches the NEXT mint and prices against a number that already decided the
+ * contract. Neither is a view.
+ */
+export const QUANT_MIN_INTERVAL = 300;
 
 export type BotKind = (typeof KINDS)[number];
 

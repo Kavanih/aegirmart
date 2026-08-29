@@ -1,5 +1,7 @@
 import { liveMarkets, liveBooks, type Market } from "./markets.js";
-import { runningBots, keyedBots, openBotKey, recordBotFill, AI_MIN_INTERVAL, type Bot } from "./bots.js";
+import {
+  runningBots, keyedBots, openBotKey, recordBotFill, AI_MIN_INTERVAL, QUANT_MIN_INTERVAL, type Bot,
+} from "./bots.js";
 import { buildEvidence } from "./quant.js";
 import { recordBotTrade } from "./stats.js";
 import { positionsFor, ordersFor } from "./markets.js";
@@ -66,6 +68,9 @@ function wants(bot: Bot, market: Market): boolean {
   // A model read takes tens of seconds. On a sixty second window the answer
   // arrives against a spot that has already moved, so an AI bot sits those out.
   if (bot.kind === "ai" && market.intervalSec < AI_MIN_INTERVAL) return false;
+  // The quant's spot tape ticks once a minute, so a sixty second window is one
+  // tick long and nothing can move inside it.
+  if (bot.kind === "quant" && market.intervalSec < QUANT_MIN_INTERVAL) return false;
   return true;
 }
 
