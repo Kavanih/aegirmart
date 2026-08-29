@@ -45,7 +45,18 @@ const SLIPPAGE = Number(process.env.SLIPPAGE ?? 0.02);
 /**
  * Hard ceiling on what any directional order will pay, under everything else.
  */
-const MAX_PRICE = Number(process.env.MAX_PRICE ?? 0.97);
+/**
+ * Dearest a directional bot will pay, whatever its model believes.
+ *
+ * This is the same 75c ceiling the quant carries, moved to where it covers both
+ * strategies. It was fitted inside the quant's calibration, so an AI bot - whose
+ * fair value comes straight from a model read and is never calibrated - could
+ * still pay up to 97c on a confident read. That is the band the record is
+ * clearest about: 75-100c went four of seven and lost 72.67, because a price
+ * that high means the book has already decided and the payoff no longer covers
+ * being wrong.
+ */
+const MAX_PRICE = Number(process.env.MAX_PRICE ?? 0.75);
 /**
  * How far below its worth a leg must be before it is worth buying.
  *

@@ -26,7 +26,20 @@ const MIN_VIEW = Number(process.env.MIN_VIEW ?? 0.05);
  *
  * The same allowance buys a usable answer roughly four times as often.
  */
-const READ_AFTER = Number(process.env.READ_AFTER ?? 0.4);
+const READ_AFTER = Number(process.env.READ_AFTER ?? 0.3);
+/**
+ * Latest a window may be read.
+ *
+ * A read takes twenty to sixty seconds, and the runner will not enter a window
+ * past 62% of its life. Starting a read at 40% therefore lands the answer
+ * between 47% and 60% - and one of the first two landed at 64%, already too
+ * late to act on. An allowance spent on an answer that arrives after the door
+ * closes is an allowance wasted.
+ *
+ * Reading between 30% and 40% lands it between 37% and 60% even on a slow
+ * provider, always inside the entry window.
+ */
+const READ_UNTIL = Number(process.env.READ_UNTIL ?? 0.4);
 /** Seconds that must remain after a read for a bot to act on it. */
 const MIN_ACT_SECONDS = Number(process.env.MIN_ACT_SECONDS ?? 80);
 /**
@@ -324,7 +337,11 @@ export function startTracker(apiKey: string): void {
         .filter((m) => {
           const left = m.expiry - nowSec;
           const elapsed = m.intervalSec - left;
-          return elapsed >= m.intervalSec * READ_AFTER && left >= MIN_ACT_SECONDS;
+          return (
+            elapsed >= m.intervalSec * READ_AFTER &&
+            elapsed <= m.intervalSec * READ_UNTIL &&
+            left >= MIN_ACT_SECONDS
+          );
         })
         // Priced out before the model is asked, not after. The book is already
         // known here, so a window the bot could not act on whatever the answer
