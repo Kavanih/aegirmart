@@ -4,6 +4,7 @@ import {
 } from "./bots.js";
 import { buildEvidence } from "./quant.js";
 import { recordBotTrade } from "./stats.js";
+import { recordDecision } from "./decisions.js";
 import { positionsFor, ordersFor } from "./markets.js";
 import { cachedPrediction } from "./tracker.js";
 import { placeQuote, redeemWin, collateralBalance } from "./chain.js";
@@ -45,6 +46,20 @@ const SLIPPAGE = Number(process.env.SLIPPAGE ?? 0.02);
  * Hard ceiling on what any directional order will pay, under everything else.
  */
 const MAX_PRICE = Number(process.env.MAX_PRICE ?? 0.97);
+/**
+ * How far below its worth a leg must be before it is worth buying.
+ *
+ * Accuracy is what pays, not volume, and accuracy fell as price rose: 71% in
+ * the 45-60c band, 50% above it. Raising the ceiling for volume therefore needs
+ * a second filter that selects for conviction rather than price, or it simply
+ * re-enters the band that lost.
+ *
+ * A marginal edge is mostly noise in the estimate. Requiring a clear gap keeps
+ * the trades that the model is actually sure about, which is where a 70-80% hit
+ * rate has to come from.
+ */
+const MIN_EDGE = Number(process.env.MIN_EDGE ?? 0.08);
+
 /**
  * Cheapest offer a directional bot will take.
  *
@@ -207,6 +222,8 @@ function directionalLeg(fair: number, bestBid: number | null, bestAsk: number | 
   // 1,300 per hundred bets.
   if (offer === null) return [];
   if (offer > worth) return [];
+  // Not merely cheap - clearly cheap. See MIN_EDGE.
+  if (worth - offer < MIN_EDGE) return [];
   // Too cheap means the book is confident it will not happen, which is the same
   // disagreement as too dear, pointing the other way.
   if (offer < MIN_PRICE) return [];
@@ -368,6 +385,19 @@ async function cycle(): Promise<void> {
         // again here billed every order twice against the daily allowance, and
         // unevenly: the second increment landed after the write, so a restart
         // dropped it and the total sat somewhere between real and double.
+        // Written next to the fill so the two can be joined later.
+        recordDecision({
+          botId: bot.id,
+          marketId: market.marketId,
+          asset: market.asset,
+          intervalSec: market.intervalSec,
+          side,
+          worth: fair > 0.5 ? fair : 1 - fair,
+          offer: sizeAt,
+          edge: (fair > 0.5 ? fair : 1 - fair) - sizeAt,
+          elapsed: (market.intervalSec - (market.expiry - now)) / market.intervalSec,
+          placedAt: Math.floor(Date.now() / 1000),
+        });
         recordBotFill(bot.id, market.marketId);
         // Attribution by strategy, which the chain cannot give: several bots
         // may share one key and look like a single trader. A maker is recorded

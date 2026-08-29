@@ -44,10 +44,12 @@ const CONFIDENCE_GAIN = Number(process.env.CONFIDENCE_GAIN ?? 1.8);
  * whole venue keeps teaching: a confident book is a well informed one, and
  * disagreeing with it is where the money goes.
  *
- * Fitted on 27 settled trades, which is thin. It is set at the top of the band
- * that actually paid rather than anywhere above it.
+ * Raised from 0.60 to 0.75 deliberately, to buy volume. On its own that walks
+ * back into the 60-75c band that lost, so it is paired with a minimum edge in
+ * the runner: a higher ceiling is only safe if the trades taken up there are
+ * clear mispricings rather than marginal ones.
  */
-const MAX_CONFIDENCE = Number(process.env.MAX_CONFIDENCE ?? 0.6);
+const MAX_CONFIDENCE = Number(process.env.MAX_CONFIDENCE ?? 0.75);
 
 /**
  * Fold the observed base rate into the lognormal estimate.

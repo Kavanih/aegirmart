@@ -19,3 +19,4 @@ plan-receipts.json
 runner.log
 frontend/vite.log
 backend/quota.json
+backend/decisions.json
