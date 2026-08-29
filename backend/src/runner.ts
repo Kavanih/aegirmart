@@ -334,7 +334,12 @@ async function cycle(): Promise<void> {
 
       const mark = `${bot.id}:${market.marketId}`;
       if (quoted.has(mark) || held.has(market.marketId)) continue;
+      // Claimed here, before any await. Claiming after pricing left a window
+      // wide enough for a second pass to slip through.
+      quoted.set(mark, market.expiry);
+      let placed = false;
 
+      try {
       // Only the middle of a window. A directional bot has nothing to see at
       // the open and nothing left to win at the close.
       if (bot.kind !== "standard") {
@@ -361,9 +366,6 @@ async function cycle(): Promise<void> {
         const chance = legs[0][0] === "yes" ? fair : 1 - fair;
         if (chance < bot.minProbability) continue;
       }
-
-      // Claim the slot before awaiting, so a slow cycle cannot double quote.
-      quoted.set(mark, market.expiry);
 
       for (const [side, price, sizeAt] of legs) {
         // Checked per ORDER, not per market. A market places two, so testing
@@ -415,7 +417,14 @@ async function cycle(): Promise<void> {
         // too, so its trade count is right; only its win RATE is meaningless,
         // and that is handled where the table is built.
         recordBotTrade(bot.id, bot.kind, market.marketId, side === "yes" ? 0 : 1);
+        placed = true;
         log(`${bot.name} ${market.asset} ${market.intervalSec}s ${side} ${result.shares.toFixed(2)}@${Math.round(result.price * 100)}c`);
+      }
+      } finally {
+        // Sitting out this pass must not lock the window for the rest of its
+        // life: the price that was wrong at 35% is often right at 50%. The
+        // claim is only kept once an order actually exists.
+        if (!placed) quoted.delete(mark);
       }
     }
   }
@@ -427,8 +436,17 @@ export function startRunner(): void {
     return;
   }
 
+  // A cycle prices markets and waits on receipts, so it can outlast its own
+  // interval. Left to overlap, two cycles both read a market as unclaimed
+  // before either claimed it, and the bot entered the same window twice three
+  // seconds apart. A tick that arrives while one is still running is skipped.
+  let running = false;
   const tick = () => {
-    cycle().catch((err) => log(`cycle failed: ${(err as Error).message}`));
+    if (running) return;
+    running = true;
+    cycle()
+      .catch((err) => log(`cycle failed: ${(err as Error).message}`))
+      .finally(() => { running = false; });
   };
   void tick();
   setInterval(tick, CYCLE_MS);
