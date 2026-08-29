@@ -24,6 +24,7 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
   const [stats, setStats] = useState<BotStats | null>(null);
   const [keyChanged, setKeyChanged] = useState(false);
   const [funds, setFunds] = useState<{ balance: number | null; affordable: number | null }>({ balance: null, affordable: null });
+  const [locked, setLocked] = useState<{ amount: number; markets: number }>({ amount: 0, markets: 0 });
   const [missing, setMissing] = useState(false);
   const [stale, setStale] = useState<string | null>(null);
 
@@ -42,6 +43,7 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
       setStats(d.stats);
       setKeyChanged(d.keyChanged);
       setFunds({ balance: d.balance, affordable: d.affordable });
+      setLocked(d.locked ?? { amount: 0, markets: 0 });
     });
   }, [address, botId]);
 
@@ -158,6 +160,16 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
         <Stat label="Expired" value={summary ? String(summary.expired) : "--"} />
         <Stat label="Volume filled" value={summary ? summary.volume.toFixed(2) : "--"} />
       </div>
+
+      {/* Neither a win nor a loss, so it never reaches P&L. Unsaid, the money
+          just looks missing from the wallet. */}
+      {locked.markets > 0 && (
+        <p className="footnote">
+          {locked.amount.toFixed(2)} tUSDC is stuck in {locked.markets}{" "}
+          {locked.markets === 1 ? "market that expired" : "markets that expired"} without the venue naming a winner.
+          It cannot be redeemed or counted as a result until the oracle resolves them.
+        </p>
+      )}
 
       {/* A bot that has run dry looks exactly like one with no view, so the
           binding limit is named rather than left to be inferred. */}

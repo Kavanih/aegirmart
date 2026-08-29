@@ -254,6 +254,8 @@ export type BotActivity = {
   balance: number | null;
   /** How many more trades that balance covers at the current stake. */
   affordable: number | null;
+  /** Collateral stuck in markets the venue expired without naming a winner. */
+  locked: { amount: number; markets: number };
 };
 
 /**

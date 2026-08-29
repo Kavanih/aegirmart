@@ -486,7 +486,17 @@ app.get("/api/bots/:id/activity", async (req, res) => {
     ).catch(() => null);
     const affordable = balance === null || bot.stake <= 0 ? null : Math.floor(balance / bot.stake);
 
-    res.json({ bot, orders, summary, stats, keyChanged, recordedMarkets: recorded, balance, affordable });
+    // Collateral sitting in markets the venue expired without ever naming a
+    // winner. It is neither a win nor a loss and never reaches P&L, so without
+    // saying so the money simply appears to have gone missing from the wallet.
+    const nowSec = Math.floor(Date.now() / 1000);
+    const stranded = orders.filter((o) => o.won === null && o.filled > 0 && o.expiry < nowSec);
+    const locked = stranded.reduce((sum, o) => sum + o.cost, 0);
+
+    res.json({
+      bot, orders, summary, stats, keyChanged, recordedMarkets: recorded, balance, affordable,
+      locked: { amount: locked, markets: stranded.length },
+    });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message, bot, orders: [], summary: null });
   }
