@@ -210,6 +210,38 @@ allowance to spend.
 
 It takes one side when its price and the book disagree.
 
+### 5.2.1 The quant is right, and was far too timid
+
+Backtested across settled five minute windows, priced halfway through each one
+from the sixty second tape:
+
+| Raw estimate | BTC finished up | ETH finished up |
+|---|---|---|
+| said 55-65% up | **69%** | **80%** |
+| said 35-55% up | **17%** | **25%** |
+
+Directionally correct in every bucket on both assets — and understated in every
+one. A lognormal digital on a five minute window sits too close to a coin flip
+for this instrument.
+
+That timidity is not harmless, because the bot pays at most what its own model
+says a leg is worth (section 5.6). Underestimating its own calls means the
+ceiling refuses trades it should take: the book would quote 87c against a
+model saying 75c, and the bot would sit out a call it was about to get right.
+
+Stretching the estimate away from 0.5 takes the tradeable windows from 47 to 82
+and lines the buckets up — a calibrated 65-80% now finishes up 67-83% of the
+time. The gain is deliberately set below what the sample argues for, roughly
+half the correction, because 47 windows is a thin basis for a constant.
+
+The first three trades after calibration: two settled, both won, **+75.26**.
+That is three trades and proves nothing on its own; the backtest is the reason
+to believe it, not the live run.
+
+**Lesson: a model can be worth trading while its numbers are not worth
+quoting.** Direction and magnitude are separate claims, and only the second one
+needed fixing.
+
 ### 5.3 AI
 
 Sends the same evidence to a language model and asks for a probability, a
@@ -745,19 +777,23 @@ Stated plainly, because a paper that only lists strengths is not useful.
 
 1. **No exit.** Positions cannot be closed, only held to settlement (2.3).
 2. **AI coverage under 9% of windows** on a free allowance (7).
-3. **The model rarely has a view.** Only about a quarter of reads on
+3. **The quant sits out early in a window.** Spot is minted at the strike, so
+   the first minute of any window genuinely is a coin flip and there is nothing
+   to price. Signal appears mid-window, which is also when a read is worth
+   buying (section 7).
+4. **The model rarely has a view.** Only about a quarter of reads on
    five-minute crypto sit more than 5c from a coin flip. When it does make a
    call it has been right 65% of the time over 17 scored calls, which is a real
    but modest edge on a small sample. An AI strategy on this instrument should
    be expected to sit out most windows.
-4. **The strategy record is too small to evaluate.** Six settled orders. Every
+5. **The strategy record is too small to evaluate.** Six settled orders. Every
    performance figure in this document is an illustration of the instrument, not
    evidence about the strategies.
-5. **Server-side keys** are a real custody risk, mitigated but not eliminated.
-6. **Cost basis is incomplete for minted positions**, where shares were acquired
+6. **Server-side keys** are a real custody risk, mitigated but not eliminated.
+7. **Cost basis is incomplete for minted positions**, where shares were acquired
    by minting rather than buying; a subset of historical rows remain unpriced.
-7. **The platform fee is unimplemented.**
-8. **Testnet only.** Liquidity, counterparties and faucet behaviour are not
+8. **The platform fee is unimplemented.**
+9. **Testnet only.** Liquidity, counterparties and faucet behaviour are not
    representative of a live market.
 
 ---
