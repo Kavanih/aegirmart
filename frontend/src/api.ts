@@ -250,6 +250,10 @@ export type BotActivity = {
   stats: BotStats | null;
   keyChanged: boolean;
   recordedMarkets: number;
+  /** Collateral the bot's key holds, or null if the chain could not be read. */
+  balance: number | null;
+  /** How many more trades that balance covers at the current stake. */
+  affordable: number | null;
 };
 
 /**

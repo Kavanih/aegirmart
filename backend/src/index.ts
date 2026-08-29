@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { liveMarkets, strikeSeries, positionsFor, leaderboard, settledMarkets, ordersFor, marketById, tradesFor, liveBooks, redemptionsFor, venueFills } from "./markets.js";
 import { costBasisFor, type BasisIndex } from "./fills.js";
+import { collateralBalance } from "./chain.js";
 import { startTracker, allRecords, modelScores, cachedPrediction, cachedPredictions, recordRead } from "./tracker.js";
 import { allStats } from "./modelStats.js";
 import { buildEvidence } from "./quant.js";
@@ -476,7 +477,16 @@ app.get("/api/bots/:id/activity", async (req, res) => {
     const recorded = (bot.markets ?? []).length;
     const keyChanged = orders.length === 0 && recorded > 0;
 
-    res.json({ bot, orders, summary, stats, keyChanged, recordedMarkets: recorded });
+    // What the bot can actually afford. A daily cap of fifty trades against a
+    // wallet holding three of them is not a cap, and the page should say which
+    // limit is really binding.
+    const balance = await collateralBalance(
+      bot.keyAddress as `0x${string}`,
+      COLLATERAL as `0x${string}`,
+    ).catch(() => null);
+    const affordable = balance === null || bot.stake <= 0 ? null : Math.floor(balance / bot.stake);
+
+    res.json({ bot, orders, summary, stats, keyChanged, recordedMarkets: recorded, balance, affordable });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message, bot, orders: [], summary: null });
   }

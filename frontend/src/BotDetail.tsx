@@ -23,6 +23,7 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
   const [summary, setSummary] = useState<BotSummary | null>(null);
   const [stats, setStats] = useState<BotStats | null>(null);
   const [keyChanged, setKeyChanged] = useState(false);
+  const [funds, setFunds] = useState<{ balance: number | null; affordable: number | null }>({ balance: null, affordable: null });
   const [missing, setMissing] = useState(false);
   const [stale, setStale] = useState<string | null>(null);
 
@@ -40,6 +41,7 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
       setSummary(d.summary);
       setStats(d.stats);
       setKeyChanged(d.keyChanged);
+      setFunds({ balance: d.balance, affordable: d.affordable });
     });
   }, [address, botId]);
 
@@ -148,6 +150,22 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
         <Stat label="Expired" value={summary ? String(summary.expired) : "--"} />
         <Stat label="Volume filled" value={summary ? summary.volume.toFixed(2) : "--"} />
       </div>
+
+      {/* A bot that has run dry looks exactly like one with no view, so the
+          binding limit is named rather than left to be inferred. */}
+      {funds.affordable !== null && funds.affordable < 1 && (
+        <p className="banner offline">
+          Out of collateral. This bot holds {funds.balance?.toFixed(2)} tUSDC and stakes {bot.stake} a trade, so it
+          cannot place another order until the wallet is topped up.
+        </p>
+      )}
+      {funds.affordable !== null && funds.affordable >= 1 && capped && bot.dailyTrades - bot.tradesToday > funds.affordable && (
+        <p className="footnote">
+          Funding is the binding limit, not the daily cap: {funds.balance?.toFixed(2)} tUSDC covers {funds.affordable}{" "}
+          more {funds.affordable === 1 ? "trade" : "trades"} at a {bot.stake} stake, while the cap allows{" "}
+          {bot.dailyTrades - bot.tradesToday}.
+        </p>
+      )}
 
       <p className={bot.keyAddress ? "bot-signer set" : "bot-signer"}>
         <FaKey aria-hidden="true" />

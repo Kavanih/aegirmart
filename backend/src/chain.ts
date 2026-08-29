@@ -201,6 +201,17 @@ export async function redeemWin(
   }
 }
 
+/** Collateral a bot key can actually spend. */
+export async function collateralBalance(address: Address, collateral: Address): Promise<number> {
+  const raw = await publicClient.readContract({
+    abi: erc20Abi,
+    address: collateral,
+    functionName: "balanceOf",
+    args: [address],
+  });
+  return Number(raw) / Number(ONE);
+}
+
 /**
  * A usable reason from a viem error.
  *

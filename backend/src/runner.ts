@@ -4,7 +4,7 @@ import { buildEvidence } from "./quant.js";
 import { recordBotTrade } from "./stats.js";
 import { positionsFor } from "./markets.js";
 import { cachedPrediction } from "./tracker.js";
-import { placeQuote, redeemWin } from "./chain.js";
+import { placeQuote, redeemWin, collateralBalance } from "./chain.js";
 
 /**
  * Executes the bot definitions.
@@ -152,10 +152,15 @@ function directionalLeg(fair: number, bestBid: number | null, bestAsk: number | 
     : (["no", 1 - fair, bestBid === null ? null : 1 - bestBid] as const);
 
   // With no book there is nothing to cross, so the read's own number stands.
-  if (offer === null) {
-    const price = Math.min(MAX_PRICE, worth);
-    return [[leg, price, price]];
-  }
+  // No resting offer, no trade.
+  //
+  // There is nothing to cross, so the order rests and usually expires unfilled.
+  // Worse, the only price available to bid is the read's own value, and paying
+  // exactly what you believe something is worth earns nothing by construction:
+  // it profits only if the model is BETTER than its stated confidence. At 94c
+  // that needs a 95% hit rate against a measured 65-74%, which loses about
+  // 1,300 per hundred bets.
+  if (offer === null) return [];
   if (offer > worth) return [];
   return [[leg, Math.min(MAX_PRICE, worth, offer + SLIPPAGE), offer]];
 }
@@ -189,6 +194,9 @@ async function sweepWins(bot: Bot, key: string): Promise<void> {
   log(`${bot.name} redeemed ${won.size.toFixed(2)} ${won.asset} shares`);
 }
 
+/** Bots already reported as out of collateral, so it is said once, not every cycle. */
+const broke = new Set<string>();
+
 async function cycle(): Promise<void> {
   // Winnings first, for every bot that holds a key. A paused bot places no
   // orders but its settled wins are still its money, and they only become
@@ -216,6 +224,26 @@ async function cycle(): Promise<void> {
     const key = openBotKey(bot.id);
     if (!key) continue;
 
+
+    // A bot with less collateral than its stake cannot place anything. Check
+    // once per cycle rather than sending transactions that must revert, and
+    // say so, because a bot that has quietly run dry looks identical to one
+    // that simply has no view.
+    const collateral = markets[0]?.collateral;
+    if (collateral && bot.key) {
+      const balance = await collateralBalance(
+        bot.key.address as `0x${string}`,
+        collateral as `0x${string}`,
+      ).catch(() => Infinity);
+      if (balance < bot.stake) {
+        if (!broke.has(bot.id)) {
+          broke.add(bot.id);
+          log(`${bot.name} is out of collateral: ${balance.toFixed(2)} left, stake is ${bot.stake}`);
+        }
+        continue;
+      }
+      broke.delete(bot.id);
+    }
 
     for (const market of markets) {
       if (!wants(bot, market)) continue;
