@@ -106,12 +106,15 @@ export async function placeQuote(privateKey: string, q: Quote): Promise<PlacedQu
     });
 
     if (allowance < escrow) {
-      const approveHash = await wallet.writeContract({
-        abi: erc20Abi,
-        address: q.collateral,
-        functionName: "approve",
-        args: [q.pool, maxUint256],
-      });
+      const approveHash = await sequenced(account.address, (nonce) =>
+        wallet.writeContract({
+          abi: erc20Abi,
+          address: q.collateral,
+          functionName: "approve",
+          args: [q.pool, maxUint256],
+          nonce,
+        }),
+      );
       await publicClient.waitForTransactionReceipt({ hash: approveHash });
     }
 
@@ -122,10 +125,12 @@ export async function placeQuote(privateKey: string, q: Quote): Promise<PlacedQu
     // the runner never has to cancel anything.
     if (q.expiry <= nowSec + 5) return { error: "window too close to expiry" };
 
-    const hash = await wallet.writeContract({
+    const hash = await sequenced(account.address, (nonce) =>
+      wallet.writeContract({
       abi: binaryPoolAbi,
       address: q.pool,
       functionName: "placeBinaryOrder",
+      nonce,
       args: [
         q.side === "yes" ? ORDER_KIND.BUY_YES : ORDER_KIND.BUY_NO,
         priceYes,
@@ -137,7 +142,8 @@ export async function placeQuote(privateKey: string, q: Quote): Promise<PlacedQu
         0n,
         0n,
       ],
-    });
+      }),
+    );
 
     // A reverted binary write does not always throw, so read the receipt.
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
@@ -187,18 +193,58 @@ export async function redeemWin(
   if (amount <= 0n) return { error: "nothing to redeem" };
 
   try {
-    const hash = await wallet.writeContract({
-      abi: settlementAbi,
-      address: SETTLEMENT,
-      functionName: "finalizeAndRedeem",
-      args: [pool, outcomeId, amount, account.address],
-    });
+    const hash = await sequenced(account.address, (nonce) =>
+      wallet.writeContract({
+        abi: settlementAbi,
+        address: SETTLEMENT,
+        functionName: "finalizeAndRedeem",
+        args: [pool, outcomeId, amount, account.address],
+        nonce,
+      }),
+    );
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     if (receipt.status !== "success") return { error: "redeem reverted" };
     return { hash };
   } catch (err) {
     return { error: revertReason(err) };
   }
+}
+
+/**
+ * Serialises writes per signing key, and hands out nonces itself.
+ *
+ * Two orders from one key 200ms apart both read the same transaction count and
+ * the second was rejected as "nonce too low". It never showed while a bot
+ * traded one asset; it appeared the moment one placed a BTC and an ETH order in
+ * the same cycle. The node's pending count is not reliable that quickly, so the
+ * count is read once and advanced locally, and a failure drops the cached value
+ * so the next attempt re-reads it.
+ */
+const pending = new Map<string, Promise<unknown>>();
+const nonces = new Map<string, number>();
+
+async function sequenced<T>(address: Address, run: (nonce: number) => Promise<T>): Promise<T> {
+  const key = address.toLowerCase();
+  const prior = pending.get(key) ?? Promise.resolve();
+
+  const task = prior.then(async () => {
+    let nonce = nonces.get(key);
+    if (nonce === undefined) {
+      nonce = await publicClient.getTransactionCount({ address, blockTag: "pending" });
+    }
+    try {
+      const result = await run(nonce);
+      nonces.set(key, nonce + 1);
+      return result;
+    } catch (err) {
+      // The chain's view is authoritative again; re-read on the next attempt.
+      nonces.delete(key);
+      throw err;
+    }
+  });
+
+  pending.set(key, task.catch(() => undefined));
+  return task;
 }
 
 /** Collateral a bot key can actually spend. */
