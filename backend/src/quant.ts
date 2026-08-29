@@ -11,6 +11,29 @@ const SECONDS_PER_YEAR = 365 * 24 * 60 * 60;
  */
 const MAX_SPOT_AGE = Number(process.env.MAX_SPOT_AGE ?? 240);
 
+/**
+ * How far to push a raw estimate away from a coin flip.
+ *
+ * The lognormal digital is directionally right here but far too timid.
+ * Backtested over 47 settled five minute windows, taken halfway through:
+ *
+ *   said 55-65% up  ->  BTC finished up 69% of the time, ETH 80%
+ *   said 35-55% up  ->  BTC finished up 17% of the time, ETH 25%
+ *
+ * Right every time, and understated every time. Left raw it prices its own
+ * calls below what they are worth, so the ceiling refuses trades it should
+ * take and the bot sits out almost everything.
+ *
+ * Fitted on 47 windows, which is few. Deliberately set below what the sample
+ * suggests: half the correction rather than all of it.
+ */
+const CONFIDENCE_GAIN = Number(process.env.CONFIDENCE_GAIN ?? 1.8);
+
+/** Stretch a probability away from 0.5, keeping it a probability. */
+export function calibrate(p: number, gain = CONFIDENCE_GAIN): number {
+  return Math.min(0.98, Math.max(0.02, 0.5 + (p - 0.5) * gain));
+}
+
 // Abramowitz and Stegun 7.1.26. Accurate to ~1e-7, enough for a display probability.
 function normalCdf(x: number): number {
   const sign = x < 0 ? -1 : 1;
@@ -107,7 +130,7 @@ export async function buildEvidence(market: {
     strike: market.strike,
     tauSeconds,
     vol,
-    modelProbability: digitalProbability(spot, market.strike, vol, tauSeconds),
+    modelProbability: calibrate(digitalProbability(spot, market.strike, vol, tauSeconds)),
     baseRateProbability: rate.probability,
     baseRateSample: rate.sampleSize,
     marketProbability: market.lastPrice,
