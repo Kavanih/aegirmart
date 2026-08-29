@@ -45,6 +45,29 @@ const SLIPPAGE = Number(process.env.SLIPPAGE ?? 0.02);
  * Hard ceiling on what any directional order will pay, under everything else.
  */
 const MAX_PRICE = Number(process.env.MAX_PRICE ?? 0.97);
+/**
+ * Cheapest offer a directional bot will take.
+ *
+ * Losing is symmetric around a confident book, not one-sided. Over 32 settled
+ * trades, grouped by the price paid:
+ *
+ *    0-30c   0 of 3 won   -58.37
+ *   30-45c   0 of 1 won   -11.95
+ *   45-60c   5 of 7 won  +104.57
+ *   60-75c   7 of 14 won -128.40
+ *  75-100c   4 of 7 won   -72.67
+ *
+ * Read the other way: trades where the market sat within 15c of a coin flip
+ * made +53, and everything further out lost. A price far from 50c means the
+ * book has an opinion, and disagreeing with an opinionated book is where this
+ * bot's money goes - in BOTH directions. A 12c offer is the market saying it
+ * will not happen, and it has been right.
+ *
+ * With the ceiling above, this brackets trading to the band where the market
+ * is genuinely unsure. Fitted on 32 trades, so it is a working rule, not a law.
+ */
+const MIN_PRICE = Number(process.env.MIN_PRICE ?? 0.4);
+
 /** Fraction of a window after which its read no longer describes the price. */
 const MAX_READ_AGE = Number(process.env.MAX_READ_AGE ?? 0.34);
 /** The venue's price grid, so a back off lands on a legal price. */
@@ -167,6 +190,9 @@ function directionalLeg(fair: number, bestBid: number | null, bestAsk: number | 
   // 1,300 per hundred bets.
   if (offer === null) return [];
   if (offer > worth) return [];
+  // Too cheap means the book is confident it will not happen, which is the same
+  // disagreement as too dear, pointing the other way.
+  if (offer < MIN_PRICE) return [];
   return [[leg, Math.min(MAX_PRICE, worth, offer + SLIPPAGE), offer]];
 }
 
