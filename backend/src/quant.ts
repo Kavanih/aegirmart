@@ -49,6 +49,27 @@ const CONFIDENCE_GAIN = Number(process.env.CONFIDENCE_GAIN ?? 1.8);
  */
 const MAX_CONFIDENCE = Number(process.env.MAX_CONFIDENCE ?? 0.6);
 
+/**
+ * Fold the observed base rate into the lognormal estimate.
+ *
+ * The digital assumes no drift. This venue has one: settled windows have run
+ * about 56% up, and near the money the local rate has read as high as 65%. The
+ * estimate was reported beside the model and never used, and the cost of
+ * ignoring it was one-sided - over 34 settled trades, UP calls won 68% and made
+ * +73, while DOWN calls won 33% and lost 198. The model was betting against a
+ * drift it had already measured and then discarded.
+ *
+ * Weighted by how much history the rate is built on, so a thin sample barely
+ * moves the estimate and a full one counts.
+ */
+function blend(digital: number, rate: { probability: number; sampleSize: number }): number {
+  const weight = Math.min(rate.sampleSize / BASE_RATE_FULL_WEIGHT, 1);
+  return digital * (1 - weight) + rate.probability * weight;
+}
+
+/** Sample size at which the base rate carries as much weight as the digital. */
+const BASE_RATE_FULL_WEIGHT = Number(process.env.BASE_RATE_FULL_WEIGHT ?? 60);
+
 /** Stretch a probability away from 0.5, without claiming more than was measured. */
 export function calibrate(p: number, gain = CONFIDENCE_GAIN): number {
   const stretched = 0.5 + (p - 0.5) * gain;
@@ -151,7 +172,7 @@ export async function buildEvidence(market: {
     strike: market.strike,
     tauSeconds,
     vol,
-    modelProbability: calibrate(digitalProbability(spot, market.strike, vol, tauSeconds)),
+    modelProbability: calibrate(blend(digitalProbability(spot, market.strike, vol, tauSeconds), rate)),
     baseRateProbability: rate.probability,
     baseRateSample: rate.sampleSize,
     marketProbability: market.lastPrice,

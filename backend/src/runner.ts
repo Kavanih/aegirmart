@@ -68,6 +68,23 @@ const MAX_PRICE = Number(process.env.MAX_PRICE ?? 0.97);
  */
 const MIN_PRICE = Number(process.env.MIN_PRICE ?? 0.4);
 
+/**
+ * The stretch of a window a directional bot may enter.
+ *
+ * Too early and spot still sits on the strike, so there is nothing to see. Too
+ * late and the book has already worked out the answer, and a bot arriving then
+ * is buying a decided contract. Over 34 settled trades:
+ *
+ *   entered under 90s in   17 trades, 59% won,  -68.26
+ *   entered 90-180s in     10 trades, 60% won,  +89.04
+ *   entered after 180s      7 trades, 29% won, -145.70
+ *
+ * The middle of the window is the only stretch that has paid, which is the same
+ * window the tracker was already told to read in for the same reason.
+ */
+const ENTER_FROM = Number(process.env.ENTER_FROM ?? 0.3);
+const ENTER_UNTIL = Number(process.env.ENTER_UNTIL ?? 0.62);
+
 /** Fraction of a window after which its read no longer describes the price. */
 const MAX_READ_AGE = Number(process.env.MAX_READ_AGE ?? 0.34);
 /** The venue's price grid, so a back off lands on a legal price. */
@@ -289,6 +306,13 @@ async function cycle(): Promise<void> {
 
       const mark = `${bot.id}:${market.marketId}`;
       if (quoted.has(mark) || held.has(market.marketId)) continue;
+
+      // Only the middle of a window. A directional bot has nothing to see at
+      // the open and nothing left to win at the close.
+      if (bot.kind !== "standard") {
+        const elapsed = (market.intervalSec - (market.expiry - now)) / market.intervalSec;
+        if (elapsed < ENTER_FROM || elapsed > ENTER_UNTIL) continue;
+      }
       if (bot.dailyTrades > 0 && bot.tradesToday >= bot.dailyTrades) break;
 
       const book = bookByMarket.get(market.marketId);
