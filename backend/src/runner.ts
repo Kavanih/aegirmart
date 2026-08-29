@@ -48,15 +48,19 @@ const SLIPPAGE = Number(process.env.SLIPPAGE ?? 0.02);
 /**
  * Dearest a directional bot will pay, whatever its model believes.
  *
- * This is the same 75c ceiling the quant carries, moved to where it covers both
- * strategies. It was fitted inside the quant's calibration, so an AI bot - whose
- * fair value comes straight from a model read and is never calibrated - could
- * still pay up to 97c on a confident read. That is the band the record is
- * clearest about: 75-100c went four of seven and lost 72.67, because a price
- * that high means the book has already decided and the payoff no longer covers
- * being wrong.
+ * Raised to 75c to buy volume, then put back. The measured record does not
+ * support anything above 60c, and says so twice over:
+ *
+ *   40-50c   11 trades,  5 won (45%), needs 45%,  +29.14
+ *   50-60c    5 trades,  5 won (100%), needs 55%, +129.86
+ *   60-75c   14 trades,  7 won (50%), needs 69%, -128.40
+ *   75-100c   5 trades,  2 won (40%), needs 82%,  -87.03
+ *
+ * Volume above 60c is volume at a 50% hit rate against a price demanding two
+ * thirds, and no amount of it turns profitable. The stated aim is 70-80%
+ * accuracy, and that only exists below the line.
  */
-const MAX_PRICE = Number(process.env.MAX_PRICE ?? 0.75);
+const MAX_PRICE = Number(process.env.MAX_PRICE ?? 0.6);
 /**
  * How far below its worth a leg must be before it is worth buying.
  *
