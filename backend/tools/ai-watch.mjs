@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+// Resolved against this file, so the watcher runs from any directory.
+const root = (n) => fileURLToPath(new URL(`../${n}`, import.meta.url));
 const now = () => Math.floor(Date.now() / 1000);
 const books = await (await fetch("http://localhost:8787/api/books")).json();
 const all = Array.isArray(books) ? books : books.books || [];
-const reads = JSON.parse(readFileSync("./predictions.json", "utf8"));
-const bots = JSON.parse(readFileSync("./bots.json", "utf8"));
+const reads = JSON.parse(readFileSync(root("predictions.json"), "utf8"));
+const bots = JSON.parse(readFileSync(root("bots.json"), "utf8"));
 const bot = Object.values(bots).find((x) => x.id === "e8f84e4a-2d3b-424d-a539-31d277499cc5");
 const t = new Date().toISOString().slice(11, 19);
 const SLIP = 0.02, MAX = 0.97;

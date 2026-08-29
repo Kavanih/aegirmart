@@ -1,5 +1,5 @@
-import { buildEvidence } from "./src/quant.js";
-import { liveMarkets, liveBooks } from "./src/markets.js";
+import { buildEvidence } from "../src/quant.js";
+import { liveMarkets, liveBooks } from "../src/markets.js";
 const markets = (await liveMarkets(300, 10)).filter((m) => m.asset === "BTC");
 const books = await liveBooks().catch(() => []);
 const byId = new Map(books.map((b) => [b.marketId, b]));
