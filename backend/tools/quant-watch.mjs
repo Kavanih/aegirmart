@@ -1,10 +1,15 @@
 import { buildEvidence } from "../src/quant.js";
 import { liveMarkets, liveBooks } from "../src/markets.js";
-const markets = (await liveMarkets(300, 10)).filter((m) => m.asset === "BTC");
+// Both assets. Watching only BTC hid every ETH decision on a bot that trades
+// both, which is half of what it does.
+const now0 = Math.floor(Date.now() / 1000);
+const markets = (await liveMarkets(300, 10))
+  .filter((m) => m.expiry > now0)
+  .sort((a, b) => a.expiry - b.expiry);
 const books = await liveBooks().catch(() => []);
 const byId = new Map(books.map((b) => [b.marketId, b]));
 const now = Math.floor(Date.now() / 1000);
-for (const m of markets.slice(0, 2)) {
+for (const m of markets.slice(0, 4)) {
   const ev = await buildEvidence(m).catch((e) => null);
   if (!ev) { console.log(m.asset, "evidence unavailable"); continue; }
   const p = ev.modelProbability;
