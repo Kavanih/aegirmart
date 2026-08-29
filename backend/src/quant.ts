@@ -30,18 +30,24 @@ const MAX_SPOT_AGE = Number(process.env.MAX_SPOT_AGE ?? 240);
 const CONFIDENCE_GAIN = Number(process.env.CONFIDENCE_GAIN ?? 1.8);
 
 /**
- * Most confidence the backtest actually measured.
+ * Most confidence this model has earned the right to act on.
  *
- * The calibration buckets stop at 65-80%; above that there is no evidence at
- * all, so a stretched estimate of 0.98 is extrapolation wearing a measurement's
- * clothes. It matters because the bot pays up to what it claims a leg is worth:
- * claiming 98% licenses paying 91c, and if the truth up there is nearer 85%
- * that trade loses 3.50 every time it fires.
+ * The bot pays up to what it claims a leg is worth, so this is really a price
+ * ceiling. Live trades, grouped by the price actually paid:
  *
- * Capped at the top of the measured range. The bot may still be very confident;
- * it may not act on more confidence than has been checked.
+ *   45-60c   5 trades, 80% won against 52% needed   +109.43
+ *   60-75c  14 trades, 50% won against 69% needed   -128.40
+ *   75-100c  6 trades, 50% won against 83% needed    -76.71
+ *
+ * Real skill at moderate prices, none at high ones - above 60c the win rate is
+ * a coin flip while the price demands two thirds. That is the same lesson the
+ * whole venue keeps teaching: a confident book is a well informed one, and
+ * disagreeing with it is where the money goes.
+ *
+ * Fitted on 27 settled trades, which is thin. It is set at the top of the band
+ * that actually paid rather than anywhere above it.
  */
-const MAX_CONFIDENCE = Number(process.env.MAX_CONFIDENCE ?? 0.85);
+const MAX_CONFIDENCE = Number(process.env.MAX_CONFIDENCE ?? 0.6);
 
 /** Stretch a probability away from 0.5, without claiming more than was measured. */
 export function calibrate(p: number, gain = CONFIDENCE_GAIN): number {
