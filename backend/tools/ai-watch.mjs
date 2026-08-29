@@ -10,7 +10,7 @@ const reads = JSON.parse(readFileSync(root("predictions.json"), "utf8"));
 const bots = JSON.parse(readFileSync(root("bots.json"), "utf8"));
 const bot = Object.values(bots).find((x) => x.id === "e8f84e4a-2d3b-424d-a539-31d277499cc5");
 const t = new Date().toISOString().slice(11, 19);
-const SLIP = 0.02, MAX = 0.97;
+const SLIP = 0.02, MAX = 0.75, FLOOR = 0.4, EDGE = 0.08;
 
 for (const m of all.filter((x) => x.intervalSec === 300)) {
   const r = reads.find((z) => z.marketId === m.marketId);
@@ -26,8 +26,10 @@ for (const m of all.filter((x) => x.intervalSec === 300)) {
     const up = fair > 0.5;
     const worth = up ? fair : 1 - fair;
     const offer = up ? ask : (bid === null ? null : 1 - bid);
-    if (offer === null) v = `>>> BUY ${up ? "UP" : "DOWN"} at own value ${Math.min(MAX, worth).toFixed(2)} (no book)`;
+    if (offer === null) v = "sit out - no offer to cross";
     else if (offer > worth) v = `sit out - ${up ? "UP" : "DOWN"} costs ${offer.toFixed(3)}, worth ${worth.toFixed(3)}`;
+    else if (offer < FLOOR) v = `sit out - ${offer.toFixed(3)} is the book saying no`;
+    else if (worth - offer < EDGE) v = `sit out - only ${Math.round((worth - offer) * 100)}c edge, needs ${EDGE * 100}`;
     else v = `>>> BUY ${up ? "UP" : "DOWN"} limit ${Math.min(MAX, worth, offer + SLIP).toFixed(2)} (offer ${offer.toFixed(3)}, worth ${worth.toFixed(3)})`;
   }
   console.log(`[${t}] ${m.asset} p=${String(fair).padEnd(5)} ${r.side.padEnd(4)} age=${String(age).padStart(3)}s -> ${v}`);
