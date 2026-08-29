@@ -2,7 +2,7 @@ import { liveMarkets, liveBooks, type Market } from "./markets.js";
 import { runningBots, keyedBots, openBotKey, recordBotFill, AI_MIN_INTERVAL, type Bot } from "./bots.js";
 import { buildEvidence } from "./quant.js";
 import { recordBotTrade } from "./stats.js";
-import { positionsFor } from "./markets.js";
+import { positionsFor, ordersFor } from "./markets.js";
 import { cachedPrediction } from "./tracker.js";
 import { placeQuote, redeemWin, collateralBalance } from "./chain.js";
 
@@ -224,6 +224,14 @@ async function cycle(): Promise<void> {
     const key = openBotKey(bot.id);
     if (!key) continue;
 
+    // Markets this bot already has an order in, read from the venue rather than
+    // from memory. The in-memory guard died with every restart, and this
+    // session restarted often: the same window was entered three times in four
+    // minutes, tripling a loss that should have been taken once.
+    const held = await ordersFor(bot.key!.address, 100)
+      .then((rows) => new Set(rows.map((o) => o.marketId)))
+      .catch(() => new Set<string>());
+
 
     // A bot with less collateral than its stake cannot place anything. Check
     // once per cycle rather than sending transactions that must revert, and
@@ -249,7 +257,7 @@ async function cycle(): Promise<void> {
       if (!wants(bot, market)) continue;
 
       const mark = `${bot.id}:${market.marketId}`;
-      if (quoted.has(mark)) continue;
+      if (quoted.has(mark) || held.has(market.marketId)) continue;
       if (bot.dailyTrades > 0 && bot.tradesToday >= bot.dailyTrades) break;
 
       const book = bookByMarket.get(market.marketId);
