@@ -799,12 +799,64 @@ button { font: inherit; }
   .stat-value { font-size: 18px; }
 
   .market-grid { grid-template-columns: 1fr; }
-  .deck { min-height: 400px; max-height: none; }
+  /* The card is absolutely positioned inside the deck and clips what it
+     cannot fit, so the deck has to be tall enough for a whole contract:
+     header, both prices, the read, the payout and the settlement note. */
+  .deck { min-height: 500px; max-height: none; }
   .toast-stack { left: 12px; right: 12px; bottom: 12px; max-width: none; }
   .undo-bar, .trade-bar { left: 12px; right: 12px; transform: none; justify-content: space-between; }
   .empty-state { padding: 44px 16px; }
-  .filter-row { gap: 4px; }
+  .filter-row { gap: 4px; flex-wrap: wrap; }
   .filter { padding: 5px 11px; font-size: 11px; }
+
+  /* Twenty six pixels of gutter each side is a fifth of a phone screen. */
+  .main { padding: 16px 13px 32px; }
+  .topbar { padding: 10px 13px; gap: 10px; }
+  .main.narrow { max-width: none; }
+
+  /* Anything laid out in columns becomes one column. A 296px minimum column
+     overflows a 375px screen once the gutters are counted. */
+  .bot-grid, .tier-grid, .market-actions, .prices, .ticket-sides,
+  .bot-config, .field-row, .profile-balances { grid-template-columns: minmax(0, 1fr); }
+  .controls { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .tier-grid { padding: 18px 0 24px; gap: 14px; }
+
+  /* Three strategy cards abreast leaves each too narrow to read. */
+  .kind-grid { grid-template-columns: minmax(0, 1fr); }
+
+  /* A modal is a sheet at this width: full bleed, and scrollable so a long
+     form cannot push its own buttons off the bottom of the screen. */
+  .modal-scrim { padding: 0; align-items: flex-end; }
+  .modal { max-width: none; border-radius: 16px 16px 0 0;
+    max-height: 92dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Long addresses and model ids must wrap rather than widen the page. */
+  .addr-cell, .model-cell, .bot-signer { overflow-wrap: anywhere; }
+
+  .section-head { font-size: 13px; }
+  .footnote { font-size: 11px; }
+}
+
+/* ---- Phones proper ---- */
+@media (max-width: 430px) {
+  .main { padding: 14px 11px 28px; }
+  .topbar { padding: 9px 11px; }
+  .page-head h2 { font-size: 17px; }
+
+  /* Two stat tiles still fit; three do not. */
+  .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 7px; }
+  .stat-value { font-size: 16px; }
+  .stat-label { font-size: 9.5px; }
+
+  .hero { min-height: 360px; }
+  .hero-copy h2 { font-size: 20px; }
+
+  /* Every button stays at least a finger wide. */
+  .bot-btn, .filter, .ghost-btn, .cta { min-height: 38px; }
+  .bot-card footer { flex-wrap: wrap; }
+
+  .ticket .stake-quick { grid-template-columns: repeat(3, 1fr); }
+  .lane-row { justify-content: stretch; }
 }
 
 @media (prefers-reduced-motion: reduce) {
