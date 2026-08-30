@@ -105,9 +105,22 @@ const UNUSABLE = /safety|moderation|guard|lyria|whisper|tts|embed/i;
  */
 const UNATTRIBUTABLE = /^openrouter\/(free|auto)$/i;
 
+/**
+ * Free by NAME as well as by price.
+ *
+ * Checking the price alone reads a snapshot: a model priced at zero today can
+ * be repriced tomorrow, or withdrawn, and nothing here would notice. One such
+ * model - a stealth preview carrying no ":free" suffix - passed this filter on
+ * a zero price and has since vanished from the catalogue entirely.
+ *
+ * The suffix is a promise about billing rather than an observation of it, so
+ * both must hold: the id must be marked free and the price must still read
+ * zero. Nothing that can quietly start costing money gets called.
+ */
 function isFree(model: CatalogModel): boolean {
   const p = model.pricing;
   if (!p) return false;
+  if (!/:free$/i.test(model.id)) return false;
   return Number(p.prompt) === 0 && Number(p.completion) === 0;
 }
 
