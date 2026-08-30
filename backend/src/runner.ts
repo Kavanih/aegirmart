@@ -64,16 +64,23 @@ const MAX_PRICE = Number(process.env.MAX_PRICE ?? 0.6);
 /**
  * How far below its worth a leg must be before it is worth buying.
  *
- * Accuracy is what pays, not volume, and accuracy fell as price rose: 71% in
- * the 45-60c band, 50% above it. Raising the ceiling for volume therefore needs
- * a second filter that selects for conviction rather than price, or it simply
- * re-enters the band that lost.
+ * Every trade now records the gap it was taken on, and over 42 settled ones
+ * that gap turns out to predict both accuracy and profit, monotonically:
  *
- * A marginal edge is mostly noise in the estimate. Requiring a clear gap keeps
- * the trades that the model is actually sure about, which is where a 70-80% hit
- * rate has to come from.
+ *    8-12c   11 trades, 27% won,  -89.81   (-8.16 a trade)
+ *   12-18c   22 trades, 45% won,  +13.28   (+0.60 a trade)
+ *   18-25c    4 trades, 75% won,  +57.24  (+14.31 a trade)
+ *   25c+      5 trades, 80% won,  +93.36  (+18.67 a trade)
+ *
+ * A one-cent gap is noise in the estimate; a twenty-cent one is a view. Moving
+ * the bar from 8c to 15c drops the bottom bucket entirely and takes the record
+ * from 48% and +74.07 to 63% and +182.40 - fewer trades, more money, and the
+ * accuracy the operator asked for.
+ *
+ * 18c would reach 78%, but on nine trades and less total profit. This sits at
+ * the point that earns most while still clearing break-even comfortably.
  */
-const MIN_EDGE = Number(process.env.MIN_EDGE ?? 0.08);
+const MIN_EDGE = Number(process.env.MIN_EDGE ?? 0.15);
 
 /**
  * Cheapest offer a directional bot will take.

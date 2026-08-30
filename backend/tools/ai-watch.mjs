@@ -10,7 +10,7 @@ const reads = JSON.parse(readFileSync(root("predictions.json"), "utf8"));
 const bots = JSON.parse(readFileSync(root("bots.json"), "utf8"));
 const bot = Object.values(bots).find((x) => x.id === "e8f84e4a-2d3b-424d-a539-31d277499cc5");
 const t = new Date().toISOString().slice(11, 19);
-const SLIP = 0.02, MAX = 0.6, FLOOR = 0.4, EDGE = 0.08;
+const SLIP = 0.02, MAX = 0.6, FLOOR = 0.4, EDGE = 0.15;
 
 for (const m of all.filter((x) => x.intervalSec === 300)) {
   const r = reads.find((z) => z.marketId === m.marketId);

@@ -3,7 +3,7 @@ import { liveMarkets, liveBooks } from "../src/markets.js";
 
 // Mirrors the runner. A watcher that disagrees with the code it watches is the
 // worst kind of instrument, since it is what the strategy gets judged by.
-const MAX = 0.6, FLOOR = 0.4, EDGE = 0.08;
+const MAX = 0.6, FLOOR = 0.4, EDGE = 0.15;
 // Both assets. Watching only BTC hid every ETH decision on a bot that trades
 // both, which is half of what it does.
 const now0 = Math.floor(Date.now() / 1000);
