@@ -65,7 +65,7 @@ export function Leaderboard() {
 
   if (failed) return frame(<EmptyState title="Leaderboard unavailable" hint="The indexer did not respond." />);
 
-  if (!traders) return frame(<TableSkeleton columns={["Trader", "Settled", "Wins", "Win rate", "Recent volume"]} rows={6} />);
+  if (!traders) return frame(<TableSkeleton columns={["Trader", "Settled", "Wins", "Win rate", "Volume"]} rows={6} />);
   if (traders.length === 0) {
     return frame(<EmptyState title="No settled positions yet" hint="Rankings appear once windows close." />);
   }
@@ -75,8 +75,8 @@ export function Leaderboard() {
       Ranked by win rate once a trader has five settled calls, by volume below that. A market held on both legs at once
       is a minted set rather than a call, so it does not count toward the record.
       <br />
-      Volume is every fill an account has ever been part of, not a recent window. An account showing none has never
-      filled an order: its shares were minted rather than bought, which is a position without a trade behind it.
+      Only accounts that have actually filled an order appear. Positions can be minted or received without a trade
+      behind them, and those accounts were topping the board with perfect records built from partial history.
     </p>
   );
 
@@ -98,7 +98,7 @@ export function Leaderboard() {
             <th className="num">Settled</th>
             <th className="num">Wins</th>
             <th className="num">Win rate</th>
-            <th className="num">Recent volume</th>
+            <th className="num">Volume</th>
           </tr>
         </thead>
         <tbody>

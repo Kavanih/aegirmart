@@ -190,7 +190,7 @@ app.get("/api/predictions", (req, res) => {
 
 app.get("/api/leaderboard", async (_req, res) => {
   try {
-    const rows = await boardCache.resolve("board", 30_000, () => leaderboard(2000, tradedVolume()));
+    const rows = await boardCache.resolve("board", 30_000, () => leaderboard(10_000, tradedVolume()));
     res.json({ traders: rows });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message, traders: [] });

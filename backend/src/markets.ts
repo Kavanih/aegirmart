@@ -812,6 +812,13 @@ export async function leaderboard(limit: number, accumulated: Record<string, num
   }
 
   return [...byAccount.values()]
+    // A leaderboard of traders should contain traders. Ranking every account
+    // holding a settled position put non-traders at the top with perfect
+    // records: accounts with no fills and no orders, whose only positions are
+    // winners because the losing ones fell outside the rows read. Requiring a
+    // fill is what separates someone who traded from someone who was handed a
+    // token.
+    .filter((r) => (tradedBy.get(r.account) ?? 0) > 0)
     .map((r) => ({
       ...r,
       winRate: r.settled ? r.wins / r.settled : 0,
