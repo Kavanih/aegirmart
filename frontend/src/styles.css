@@ -688,6 +688,9 @@ body {
 @media (prefers-reduced-motion: reduce) { .toast-spin { animation: none; } }
 
 /* Profile stat cards, filter row and claim action. */
+/* Which stretch the figures below are measured over. */
+.period-row { margin-bottom: 14px; }
+
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 18px; }
 .stat-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
   padding: 13px 15px; display: flex; flex-direction: column; gap: 5px; }

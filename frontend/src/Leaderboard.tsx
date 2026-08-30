@@ -72,9 +72,11 @@ export function Leaderboard() {
 
   const footnote = (
     <p className="footnote">
-      Ranked by win rate once a trader has five settled calls, by recent volume below that. A market held on both legs
-      at once is a minted set rather than a call, so it counts toward volume but not toward the record. Recent volume
-      covers the last thousand fills on the venue, so an older trader can show none.
+      Ranked by win rate once a trader has five settled calls, by volume below that. A market held on both legs at once
+      is a minted set rather than a call, so it does not count toward the record.
+      <br />
+      Volume is every fill an account has ever been part of, not a recent window. An account showing none has never
+      filled an order: its shares were minted rather than bought, which is a position without a trade behind it.
     </p>
   );
 

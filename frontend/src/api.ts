@@ -145,7 +145,14 @@ export type Position = {
 };
 
 export type VenueStats = { volume: number; trades: number; traders: number };
-export type StrategyRow = { kind: BotKind; trades: number; settled: number; won: number; winRate: number };
+export type StrategyRow = {
+  kind: BotKind;
+  trades: number;
+  settled: number;
+  won: number;
+  /** Null for a market maker, which holds both legs and so has no rate. */
+  winRate: number | null;
+};
 
 export async function fetchStats(): Promise<{ venue: VenueStats; strategies: StrategyRow[] } | null> {
   const res = await fetch("/api/stats");

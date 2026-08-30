@@ -739,7 +739,7 @@ export type TraderRow = { account: string; settled: number; wins: number; winRat
 // Ranked from settled positions: a position wins when its outcome is the winner.
 // Claimed positions are included, so win rate counts collected wins. Their size
 // is burned on redemption, so volume reads low for accounts that claim often.
-export async function leaderboard(limit: number): Promise<TraderRow[]> {
+export async function leaderboard(limit: number, accumulated: Record<string, number> = {}): Promise<TraderRow[]> {
   const body = JSON.stringify({
     query: `query Board($limit: Int!) {
       OutcomeBalance(
@@ -761,12 +761,24 @@ export async function leaderboard(limit: number): Promise<TraderRow[]> {
     venueFills(1000).catch((): VenueFill[] => []),
   ]);
 
-  const tradedBy = new Map<string, number>();
+  // Recent fills, then whatever has been accumulated for anyone missing from
+  // them. A trader whose activity has aged out of the last thousand fills still
+  // has a real number rather than a blank.
+  // Sum the recent fills, then take whichever is larger: this window, or the
+  // total accumulated across every window seen so far. Recent alone left forty
+  // three of fifty rows blank, because the best traders are the older ones and
+  // their fills had aged out.
+  const recent = new Map<string, number>();
   for (const fill of fills) {
     for (const account of fill.accounts) {
       const key = account.toLowerCase();
-      tradedBy.set(key, (tradedBy.get(key) ?? 0) + fill.size);
+      recent.set(key, (recent.get(key) ?? 0) + fill.size);
     }
+  }
+
+  const tradedBy = new Map<string, number>(Object.entries(accumulated));
+  for (const [key, size] of recent) {
+    tradedBy.set(key, Math.max(tradedBy.get(key) ?? 0, size));
   }
 
   // Group by account AND market first. An account holding both legs of a

@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import { FaBrain, FaCalculator, FaKey, FaPause, FaPen, FaPlay, FaRobot } from "react-icons/fa";
-import { fetchBotActivity, saveBot, stamp, windowLabel, type Bot, type BotStats, type BotSummary, type OrderRow } from "./api";
+import { fetchBotActivity, saveBot, stamp, windowLabel, type Bot, type OrderRow } from "./api";
 import { AssetMark } from "./AssetMark";
 import { TableScroll, EmptyState } from "./Table";
 
 type Props = { botId: string; onBack: () => void; onEdit: (bot: Bot) => void };
+
+const DAY = 86_400;
+const PERIODS = {
+  "24h": { label: "24 hours", seconds: DAY },
+  "7d": { label: "7 days", seconds: 7 * DAY },
+  all: { label: "All time", seconds: 0 },
+} as const;
+type PeriodKey = keyof typeof PERIODS;
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
   return (
@@ -20,11 +28,10 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
   const { address } = useAccount();
   const [bot, setBot] = useState<Bot | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
-  const [summary, setSummary] = useState<BotSummary | null>(null);
-  const [stats, setStats] = useState<BotStats | null>(null);
   const [keyChanged, setKeyChanged] = useState(false);
   const [funds, setFunds] = useState<{ balance: number | null; affordable: number | null }>({ balance: null, affordable: null });
   const [locked, setLocked] = useState<{ amount: number; markets: number }>({ amount: 0, markets: 0 });
+  const [period, setPeriod] = useState<PeriodKey>("24h");
   const [missing, setMissing] = useState(false);
   const [stale, setStale] = useState<string | null>(null);
 
@@ -39,8 +46,6 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
       setStale(null);
       setBot(d.bot);
       setOrders(d.orders);
-      setSummary(d.summary);
-      setStats(d.stats);
       setKeyChanged(d.keyChanged);
       setFunds({ balance: d.balance, affordable: d.affordable });
       setLocked(d.locked ?? { amount: 0, markets: 0 });
@@ -62,9 +67,23 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
   if (missing) return <EmptyState title="Bot not found" hint="It may have been deleted." />;
   if (!bot) return <p className="read-idle">Loading bot…</p>;
 
-  // Orders whose window has closed and whose side we can price.
-  const decided = orders.filter((o) => o.won !== null);
+  // Everything on this page is scoped to the chosen period.
+  //
+  // Lifetime figures let one bad afternoon follow a bot for ever: a run made
+  // against a stale price on the 28th was still setting the headline win rate
+  // two days later, over trades the current rules would not have taken. A
+  // period is what an operator actually wants to judge.
+  const cutoff = period === "all" ? 0 : Math.floor(Date.now() / 1000) - PERIODS[period].seconds;
+  const inPeriod = orders.filter((o) => o.placedAt >= cutoff);
+
+  const decided = inPeriod.filter((o) => o.won !== null);
   const orderPnl = decided.reduce((sum, o) => sum + (o.pnl ?? 0), 0);
+  const wonCount = decided.filter((o) => o.won).length;
+  const lostTotal = decided.filter((o) => !o.won).reduce((sum, o) => sum + Math.abs(o.pnl ?? 0), 0);
+  const filledCount = inPeriod.filter((o) => o.status === "Filled").length;
+  const restingCount = inPeriod.filter((o) => o.status === "Open").length;
+  const expiredCount = inPeriod.filter((o) => o.status === "Expired").length;
+  const volume = inPeriod.reduce((sum, o) => sum + o.filled, 0);
 
   const capped = bot.dailyTrades > 0;
   const left = capped ? Math.max(0, bot.dailyTrades - bot.tradesToday) : null;
@@ -104,23 +123,37 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
         </div>
       </div>
 
+      {/* Which stretch every figure below is measured over. */}
+      <div className="filter-row period-row">
+        {(Object.keys(PERIODS) as PeriodKey[]).map((k) => (
+          <button
+            key={k}
+            className={period === k ? "filter on" : "filter"}
+            onClick={() => setPeriod(k)}
+            aria-pressed={period === k}
+          >
+            {PERIODS[k].label}
+          </button>
+        ))}
+      </div>
+
       <div className="stat-grid">
         <Stat
           label="Win rate"
-          value={stats && stats.settled ? `${Math.round(stats.winRate * 100)}%` : "--"}
-          tone={stats && stats.settled ? (stats.winRate >= 0.5 ? "good" : "bad") : undefined}
+          value={decided.length ? `${Math.round((wonCount / decided.length) * 100)}%` : "--"}
+          tone={decided.length ? (wonCount / decided.length >= 0.5 ? "good" : "bad") : undefined}
         />
         <Stat
           label="Realised P&L"
-          value={stats ? `${stats.realised >= 0 ? "+" : ""}${stats.realised.toFixed(2)}` : "--"}
-          tone={stats ? (stats.realised >= 0 ? "good" : "bad") : undefined}
+          value={decided.length ? `${orderPnl >= 0 ? "+" : ""}${orderPnl.toFixed(2)}` : "--"}
+          tone={decided.length ? (orderPnl >= 0 ? "good" : "bad") : undefined}
         />
         <Stat
           label="Total loss"
-          value={stats ? stats.lost.toFixed(2) : "--"}
-          tone={stats && stats.lost > 0 ? "bad" : undefined}
+          value={decided.length ? lostTotal.toFixed(2) : "--"}
+          tone={lostTotal > 0 ? "bad" : undefined}
         />
-        <Stat label="Settled" value={stats ? String(stats.settled) : "--"} />
+        <Stat label="Settled" value={String(decided.length)} />
         <Stat label="Trades today" value={capped ? `${bot.tradesToday}/${bot.dailyTrades}` : String(bot.tradesToday)} />
         {/* Only an AI bot spends a model allowance. For the others the trade
             count above already carries the cap, and a second tile restating it
@@ -146,19 +179,11 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
       </div>
 
       <div className="stat-grid">
-        <Stat label="Filled" value={summary ? String(summary.filled) : "--"} tone={summary && summary.filled > 0 ? "good" : undefined} />
-        <Stat
-          label="Settled orders"
-          value={decided.length ? `${decided.filter((o) => o.won).length}/${decided.length} won` : "--"}
-        />
-        <Stat
-          label="From settled"
-          value={decided.length ? `${orderPnl >= 0 ? "+" : ""}${orderPnl.toFixed(2)}` : "--"}
-          tone={decided.length ? (orderPnl >= 0 ? "good" : "bad") : undefined}
-        />
-        <Stat label="Resting" value={summary ? String(summary.open) : "--"} />
-        <Stat label="Expired" value={summary ? String(summary.expired) : "--"} />
-        <Stat label="Volume filled" value={summary ? summary.volume.toFixed(2) : "--"} />
+        <Stat label="Filled" value={String(filledCount)} tone={filledCount > 0 ? "good" : undefined} />
+        <Stat label="Settled orders" value={decided.length ? `${wonCount}/${decided.length} won` : "--"} />
+        <Stat label="Resting" value={String(restingCount)} />
+        <Stat label="Expired" value={String(expiredCount)} />
+        <Stat label="Volume filled" value={volume.toFixed(2)} />
       </div>
 
       {/* Neither a win nor a loss, so it never reaches P&L. Unsaid, the money
@@ -219,13 +244,13 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
       {/* The counter moves the moment an order is written; the table comes from
           the indexer, which is seconds behind. Saying so beats showing a count
           beside an empty table and letting it read as a contradiction. */}
-      {bot.tradesToday > orders.length && (
+      {period === "24h" && bot.tradesToday > inPeriod.length && (
         <p className="footnote">
-          {bot.tradesToday - orders.length} of today&rsquo;s {bot.tradesToday} orders have not reached the indexer yet.
+          {bot.tradesToday - inPeriod.length} of today&rsquo;s {bot.tradesToday} orders have not reached the indexer yet.
           The count is written when an order is placed, the table when the venue reports it.
         </p>
       )}
-      {orders.length === 0 ? (
+      {inPeriod.length === 0 ? (
         <EmptyState
           title={bot.tradesToday > 0 ? "Waiting on the indexer" : "Nothing placed yet"}
           hint={
@@ -252,7 +277,7 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
               </tr>
             </thead>
             <tbody>
-              {orders.map((o) => (
+              {inPeriod.map((o) => (
                 <tr key={o.orderId}>
                   <td>
                     <span className="asset-cell">

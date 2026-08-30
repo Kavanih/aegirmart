@@ -30,17 +30,30 @@ type Store = {
   volume: number;
   trades: number;
   traders: string[];
+  /**
+   * Volume per trader, accumulated.
+   *
+   * The leaderboard measured this from the last thousand fills, so any trader
+   * whose activity had aged out showed nothing - forty three of fifty rows read
+   * as a blank column, which looks like missing data rather than a window.
+   */
+  tradedBy: Record<string, number>;
   /** Fill ids already counted, so a re-read cannot inflate the totals. */
   seen: string[];
   botTrades: BotTrade[];
 };
 
-const EMPTY: Store = { volume: 0, trades: 0, traders: [], seen: [], botTrades: [] };
+const EMPTY: Store = { volume: 0, trades: 0, traders: [], tradedBy: {}, seen: [], botTrades: [] };
+
+/** A store written before a field existed still has to load. */
+function withDefaults(s: Store): Store {
+  return { ...EMPTY, ...s, tradedBy: s.tradedBy ?? {} };
+}
 
 function load(): Store {
   if (!existsSync(STORE)) return { ...EMPTY };
   try {
-    return { ...EMPTY, ...(JSON.parse(readFileSync(STORE, "utf8")) as Store) };
+    return withDefaults(JSON.parse(readFileSync(STORE, "utf8")) as Store);
   } catch {
     return { ...EMPTY };
   }
@@ -73,7 +86,12 @@ export function observeFills(fills: { id: string; size: number; accounts: string
     seen.add(fill.id);
     store.volume += fill.size;
     store.trades += 1;
-    for (const a of fill.accounts) if (a) traders.add(a.toLowerCase());
+    for (const a of fill.accounts) {
+      if (!a) continue;
+      const key = a.toLowerCase();
+      traders.add(key);
+      store.tradedBy[key] = (store.tradedBy[key] ?? 0) + fill.size;
+    }
     added += 1;
   }
 
@@ -81,6 +99,34 @@ export function observeFills(fills: { id: string; size: number; accounts: string
   store.seen = [...seen];
   store.traders = [...traders];
   persist();
+}
+
+/**
+ * Rebuild per-trader volume from a full fill history.
+ *
+ * observeFills skips anything already in `seen`, which is correct for totals
+ * that must not double count - but it means a field added later can never be
+ * filled in from fills already counted. Volume is derived data, so it is safe
+ * to recompute outright, and this is the only way the column can cover traders
+ * whose activity predates the field.
+ */
+export function seedVolume(fills: { size: number; accounts: string[] }[]): void {
+  const rebuilt: Record<string, number> = {};
+  for (const fill of fills) {
+    for (const a of fill.accounts) {
+      if (!a) continue;
+      const key = a.toLowerCase();
+      rebuilt[key] = (rebuilt[key] ?? 0) + fill.size;
+    }
+  }
+  if (Object.keys(rebuilt).length <= Object.keys(store.tradedBy).length) return;
+  store.tradedBy = rebuilt;
+  persist();
+}
+
+/** Accumulated volume per trader, for the leaderboard. */
+export function tradedVolume(): Record<string, number> {
+  return store.tradedBy;
 }
 
 export function venueStats(): { volume: number; trades: number; traders: number } {
@@ -116,7 +162,7 @@ export type StrategyRow = {
   trades: number;
   settled: number;
   won: number;
-  winRate: number;
+  winRate: number | null;
 };
 
 /**
@@ -137,7 +183,9 @@ export function strategyTable(): StrategyRow[] {
       trades: rows.length,
       settled: settled.length,
       won,
-      winRate: kind === "standard" || settled.length === 0 ? 0 : won / settled.length,
+      // A market maker holds both legs, so one always wins and the rate says
+      // nothing. Null reads as "not scored"; zero read as "never right".
+      winRate: kind === "standard" || settled.length === 0 ? null : won / settled.length,
     };
   });
 }

@@ -13,7 +13,7 @@ import { keyStorageReady } from "./keys.js";
 import { pricedPositionsFor, summarise } from "./positions.js";
 import { TIERS, TREASURY, COLLATERAL, redeem, subscriptionFor, priceOf, tierSpec, type Tier, type Cycle } from "./plans.js";
 import { startRunner } from "./runner.js";
-import { observeFills, venueStats, strategyTable, scoreBotTrades } from "./stats.js";
+import { observeFills, seedVolume, venueStats, strategyTable, scoreBotTrades, tradedVolume } from "./stats.js";
 import { claimLiveSpend, budgetStatus } from "./budget.js";
 import type { PredictionResult } from "./openrouter.js";
 
@@ -190,7 +190,7 @@ app.get("/api/predictions", (req, res) => {
 
 app.get("/api/leaderboard", async (_req, res) => {
   try {
-    const rows = await boardCache.resolve("board", 30_000, () => leaderboard(2000));
+    const rows = await boardCache.resolve("board", 30_000, () => leaderboard(2000, tradedVolume()));
     res.json({ traders: rows });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message, traders: [] });
@@ -543,8 +543,17 @@ app.listen(PORT, () => {
   startRunner();
 
   // Fold new fills into the running totals, and settle up the strategy record.
+  let seeded = false;
   const sweep = () => {
-    venueFills(200).then(observeFills).catch(() => undefined);
+    // Deep on the first pass, shallow after. The whole venue is under 2,500
+    // fills, so one full read seeds every trader's volume; without it the
+    // leaderboard showed a blank column for anyone whose activity had aged out
+    // of the recent window, which reads as missing data rather than old data.
+    venueFills(seeded ? 200 : 5000).then((fills) => {
+      if (!seeded) seedVolume(fills);
+      observeFills(fills);
+      seeded = true;
+    }).catch(() => undefined);
     scoreBotTrades().catch(() => undefined);
   };
   sweep();

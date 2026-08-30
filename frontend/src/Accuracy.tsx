@@ -112,8 +112,10 @@ export function Accuracy() {
               {rateless ? (
                 <span className="strategy-rate none">No direction taken</span>
               ) : (
-                <span className={`strategy-rate ${row.settled === 0 ? "none" : row.winRate >= 0.5 ? "good" : "bad"}`}>
-                  {row.settled === 0 ? "Not settled yet" : `${Math.round(row.winRate * 100)}%`}
+                <span className={`strategy-rate ${(row.winRate ?? 0) >= 0.5 ? "good" : "bad"}`}>
+                  {row.settled === 0 || row.winRate === null
+                    ? "Not settled yet"
+                    : `${Math.round(row.winRate * 100)}%`}
                 </span>
               )}
               <span className="strategy-meta">
