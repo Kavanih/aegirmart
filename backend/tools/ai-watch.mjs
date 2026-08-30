@@ -29,7 +29,7 @@ for (const m of all.filter((x) => x.intervalSec === 300)) {
     if (offer === null) v = "sit out - no offer to cross";
     else if (offer > worth) v = `sit out - ${up ? "UP" : "DOWN"} costs ${offer.toFixed(3)}, worth ${worth.toFixed(3)}`;
     else if (offer < FLOOR) v = `sit out - ${offer.toFixed(3)} is the book saying no`;
-    else if (worth - offer < EDGE) v = `sit out - only ${Math.round((worth - offer) * 100)}c edge, needs ${EDGE * 100}`;
+    else if (worth - offer < EDGE) v = `sit out - ${((worth - offer) * 100).toFixed(1)}c edge, needs ${EDGE * 100}`;
     else v = `>>> BUY ${up ? "UP" : "DOWN"} limit ${Math.min(MAX, worth, offer + SLIP).toFixed(2)} (offer ${offer.toFixed(3)}, worth ${worth.toFixed(3)})`;
   }
   console.log(`[${t}] ${m.asset} p=${String(fair).padEnd(5)} ${r.side.padEnd(4)} age=${String(age).padStart(3)}s -> ${v}`);

@@ -33,7 +33,7 @@ for (const m of markets.slice(0, 4)) {
   else if (offer > worth) v = `sit out - costs ${offer.toFixed(3)}, worth ${worth.toFixed(3)}`;
   else if (offer < FLOOR) v = `sit out - ${offer.toFixed(3)} is the book saying no`;
   else if (offer > MAX) v = `sit out - ${offer.toFixed(3)} is over the ${MAX} ceiling`;
-  else if (worth - offer < EDGE) v = `sit out - only ${Math.round((worth - offer) * 100)}c edge, needs ${EDGE * 100}`;
+  else if (worth - offer < EDGE) v = `sit out - ${((worth - offer) * 100).toFixed(1)}c edge, needs ${EDGE * 100}`;
   else v = `>>> BUY ${up ? "UP" : "DOWN"} at ${offer.toFixed(3)}, worth ${worth.toFixed(3)}`;
   console.log(`  ${m.asset} ${left}s left (${Math.round(elapsed * 100)}% in) | quant p=${p.toFixed(3)} | bid=${bid} ask=${ask} -> ${v}`);
 }
