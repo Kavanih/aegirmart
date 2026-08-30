@@ -25,8 +25,9 @@ for (let i = 0; i < rounds; i++) {
     else if (elapsed > 0.62) bump("3 too late");
     else if (offer === null) bump("4 no offer");
     else if (offer > worth) bump("5 dearer than worth");
+    else if (offer > 0.6) bump("5b over the ceiling");
     else if (offer < 0.4) bump("6 below the floor");
-    else if (worth - offer < 0.08) bump("7 edge under 8c");
+    else if (worth - offer < 0.15) bump("7 edge under 15c");
     else bump("8 WOULD TRADE");
   }
   await sleep(15000);

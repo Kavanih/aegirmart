@@ -20,6 +20,8 @@ const somnia = {
 
 export const binaryPoolAbi = parseAbi([
   "function placeBinaryOrder(uint8 kind, uint256 price, uint256 quantity, uint64 expireTimestampNs, uint8 orderType, uint8 selfMatchingOption, address builder, uint96 builderFeeBpsTimes1k, uint64 userData) payable returns (bool success, uint128 id)",
+  // The fee a builder may take, approved per pool by the account that trades.
+  "function approveBuilder(address builder, uint256 maxFeeBpsTimes1k)",
   // Without these the client cannot decode a custom revert and every failure
   // reads as a bare "execution reverted", which hides which guard fired.
   "error PostOnlyWouldCross()",
@@ -125,6 +127,9 @@ export async function placeQuote(privateKey: string, q: Quote): Promise<PlacedQu
     // the runner never has to cancel anything.
     if (q.expiry <= nowSec + 5) return { error: "window too close to expiry" };
 
+    // Approved once per pool. If it fails the order still goes, without a fee.
+    const feeOn = await ensureBuilderApproved(wallet, account.address, q.pool);
+
     const hash = await sequenced(account.address, (nonce) =>
       wallet.writeContract({
       abi: binaryPoolAbi,
@@ -138,8 +143,8 @@ export async function placeQuote(privateKey: string, q: Quote): Promise<PlacedQu
         BigInt(q.expiry) * 1_000_000_000n,
         q.taking ? ORDER_TYPE_LIMIT : ORDER_TYPE_POST_ONLY,
         0,
-        "0x0000000000000000000000000000000000000000" as Address,
-        0n,
+        feeOn ? BUILDER : NO_BUILDER,
+        feeOn ? BUILDER_FEE : 0n,
         0n,
       ],
       }),
@@ -152,6 +157,58 @@ export async function placeQuote(privateKey: string, q: Quote): Promise<PlacedQu
     return { hash, shares: Number(quantity) / Number(ONE), price: Number(ownPrice) / Number(ONE) };
   } catch (err) {
     return { error: revertReason(err) };
+  }
+}
+
+/**
+ * The platform's cut, in basis points times a thousand: 100,000 is 1%.
+ *
+ * The venue takes it natively. An order names a builder and a fee, the pool
+ * pays that builder out of the trade, and the trader has to have approved that
+ * builder for at least that much on that pool first. Nothing is deducted from a
+ * bot's own balance by us, and nothing can exceed what was approved.
+ */
+const BUILDER_FEE = BigInt(process.env.BUILDER_FEE_BPS_X1K ?? 100_000);
+const BUILDER = (process.env.TREASURY_ADDRESS ??
+  "0x803f09058F436b760ea241923De14dcE51Fb53ea") as Address;
+const NO_BUILDER = "0x0000000000000000000000000000000000000000" as Address;
+
+/**
+ * Approval is per pool, per trader, per builder, and pools recycle across
+ * windows - so this is a handful of one-off transactions, not one per trade.
+ * Remembered in memory only: re-approving is harmless and a restart simply
+ * checks again.
+ */
+const approvedBuilder = new Set<string>();
+
+async function ensureBuilderApproved(
+  wallet: ReturnType<typeof createWalletClient>,
+  account: Address,
+  pool: Address,
+): Promise<boolean> {
+  if (BUILDER_FEE <= 0n) return false;
+  const key = `${pool.toLowerCase()}:${account.toLowerCase()}`;
+  if (approvedBuilder.has(key)) return true;
+
+  try {
+    const hash = await sequenced(account, (nonce) =>
+      wallet.writeContract({
+        abi: binaryPoolAbi,
+        address: pool,
+        functionName: "approveBuilder",
+        args: [BUILDER, BUILDER_FEE],
+        nonce,
+        chain: somnia,
+        account,
+      }),
+    );
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status !== "success") return false;
+    approvedBuilder.add(key);
+    return true;
+  } catch {
+    // Trading without the fee beats not trading. The next order tries again.
+    return false;
   }
 }
 
