@@ -161,7 +161,6 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
           value={decided.length ? `${orderPnl >= 0 ? "+" : ""}${orderPnl.toFixed(2)}` : "--"}
           tone={decided.length ? (orderPnl >= 0 ? "good" : "bad") : undefined}
         />
-        <Stat label="Settled" value={String(decided.length)} />
         <Stat label="Trades today" value={capped ? `${bot.tradesToday}/${bot.dailyTrades}` : String(bot.tradesToday)} />
         {/* Only an AI bot spends a model allowance. For the others the trade
             count above already carries the cap, and a second tile restating it
