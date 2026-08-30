@@ -739,18 +739,28 @@ export type TraderRow = { account: string; settled: number; wins: number; winRat
 // Ranked from settled positions: a position wins when its outcome is the winner.
 // Claimed positions are included, so win rate counts collected wins. Their size
 // is burned on redemption, so volume reads low for accounts that claim often.
+/**
+ * Traders on THIS venue, ranked.
+ *
+ * The position query carried no venue filter while every other query here did,
+ * so the board ranked whoever the indexer happened to return - and this venue
+ * is a rounding error on that indexer: five of three thousand settled markets.
+ * The names, the records and the perfect win rates all belonged to a different
+ * market. Volume was already filtered to this venue, which is why those rows
+ * showed a settled record and no volume at all.
+ */
 export async function leaderboard(limit: number, accumulated: Record<string, number> = {}): Promise<TraderRow[]> {
   const body = JSON.stringify({
-    query: `query Board($limit: Int!) {
+    query: `query Board($venue: String!, $limit: Int!) {
       OutcomeBalance(
         limit: $limit
-        where: {market: {finalized: {_eq: true}}}
+        where: {market: {finalized: {_eq: true}, venueId: {_eq: $venue}}}
         order_by: {market: {expiry: desc}}
       ) {
         ${POSITION_FIELDS}
       }
     }`,
-    variables: { limit },
+    variables: { venue: VENUE_ID, limit },
   });
 
   // Volume has to come from fills. A settled leg's balance is what is LEFT,
