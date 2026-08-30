@@ -38,7 +38,17 @@ app.use((_req, res, next) => {
 });
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, keyConfigured: API_KEY.length > 0, freeQuota: budgetStatus() });
+  // The ledger models the upstream cap; it is not the upstream cap. When the
+  // provider has refused, our count of what is left is simply wrong - it read
+  // "48 of 50 remaining" while every request was coming back 429. Report the
+  // refusal, because a healthy looking number that cannot be spent is worse
+  // than no number.
+  const blockedUntil = quotaBlockedFor();
+  res.json({
+    ok: true,
+    keyConfigured: API_KEY.length > 0,
+    freeQuota: { ...budgetStatus(), blockedUntil: blockedUntil > 0 ? Date.now() + blockedUntil : null },
+  });
 });
 
 app.get("/api/markets", async (req, res) => {

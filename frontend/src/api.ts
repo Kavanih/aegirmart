@@ -458,7 +458,13 @@ export function shortAddress(address: string): string {
 export type Health = {
   ok: boolean;
   keyConfigured: boolean;
-  freeQuota: { limit: number; spent: number; remaining: number };
+  freeQuota: {
+    limit: number;
+    spent: number;
+    remaining: number;
+    /** Set when the provider has refused; our remaining count is moot until then. */
+    blockedUntil: number | null;
+  };
 };
 
 export async function fetchHealth(): Promise<Health | null> {

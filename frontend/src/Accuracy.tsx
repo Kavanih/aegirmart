@@ -90,8 +90,17 @@ export function Accuracy() {
         {health && (
           <StatCard
             label="Free allowance"
-            value={`${health.freeQuota.remaining}/${health.freeQuota.limit}`}
-            tone={health.freeQuota.remaining === 0 ? "bad" : undefined}
+            value={
+              health.freeQuota.blockedUntil
+                ? "Exhausted"
+                : `${health.freeQuota.remaining}/${health.freeQuota.limit}`
+            }
+            tone={health.freeQuota.blockedUntil || health.freeQuota.remaining === 0 ? "bad" : undefined}
+            note={
+              health.freeQuota.blockedUntil
+                ? `provider refusing until ${new Date(health.freeQuota.blockedUntil).toISOString().slice(11, 16)} UTC`
+                : undefined
+            }
           />
         )}
       </div>
@@ -216,7 +225,7 @@ export function Accuracy() {
         <EmptyState
           title="No predictions yet"
           hint={
-            health && health.freeQuota.remaining === 0
+            health && (health.freeQuota.remaining === 0 || health.freeQuota.blockedUntil)
               ? "The day's free model allowance is spent, so the tracker is not reading new windows. It resumes when the allowance resets at 00:00 UTC."
               : health && !health.keyConfigured
                 ? "No model key is configured, so the tracker cannot read a window."
@@ -287,11 +296,17 @@ export function Accuracy() {
   );
 }
 
-function StatCard({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
+function StatCard({
+  label,
+  value,
+  tone,
+  note,
+}: { label: string; value: string; tone?: "good" | "bad"; note?: string }) {
   return (
     <div className="stat-card">
       <span className="stat-label">{label}</span>
       <span className={`stat-value ${tone ?? ""}`}>{value}</span>
+      {note && <span className="stat-note">{note}</span>}
     </div>
   );
 }
