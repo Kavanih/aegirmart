@@ -755,10 +755,23 @@ the thing Pro actually buys is a larger share of the model read budget, and
 eventually escape from it entirely. Reads are the binding limit on the AI
 strategy, so reads are what the tiers meter.
 
-A platform fee of 1% per trade is specified and not yet implemented. The venue
-supports it natively through a builder address and fee parameter on order
-placement; approval is per pool, per user, per builder, and pools recycle, so it
-costs one approval per pool rather than one per trade.
+A platform fee of **1% per trade** is implemented, and the venue takes it
+natively rather than the app deducting anything. Every order names a builder
+address and a fee, the pool pays that builder out of the trade, and the trading
+account must first have approved that builder for at least that much on that
+pool. The fee cannot exceed what was approved, and nothing is taken from a bot's
+balance by us.
+
+```
+approveBuilder(address builder, uint256 maxFeeBpsTimes1k)
+placeBinaryOrder(..., address builder, uint96 builderFeeBpsTimes1k, ...)
+```
+
+Units are basis points times a thousand, so `100000` is 1%. Both were read off
+an existing approval on chain rather than assumed. Approval is per pool, per
+trader, per builder, and pools recycle across windows, so it costs a handful of
+one-off transactions rather than one per trade. A failed approval sends the
+order without a fee: trading without the cut beats not trading.
 
 ---
 
@@ -770,6 +783,34 @@ zero balance, so summing balances undercounts exactly the positions that
 mattered most.
 
 ---
+
+## 11.1 Tuning on the right variable
+
+Every rule in section 5 was arrived at by grouping settled trades and cutting
+them by the price paid. That was always a proxy. Price correlates with
+conviction - a cheap leg is usually one the model rates well above the market -
+but it is not the same thing, which is why each cut only half worked and kept
+needing revision.
+
+The bot now records why it took each trade at the moment it took it: the model's
+value, the price on offer, the gap between them, and how far into the window it
+was. Cutting the record by that gap rather than by price gives a far cleaner
+signal, monotonic in both accuracy and profit:
+
+| Edge | Trades | Won | Rate | Net | Per trade |
+|---|---|---|---|---|---|
+| 8-12c | 11 | 3 | 27% | -89.81 | -8.16 |
+| 12-18c | 22 | 10 | 45% | +13.28 | +0.60 |
+| 18-25c | 4 | 3 | 75% | +57.24 | +14.31 |
+| 25c+ | 5 | 4 | 80% | +93.36 | +18.67 |
+
+Moving the minimum edge from 8c to 15c drops the bottom bucket outright and
+takes the record from 48% and +74.07 to **63% and +182.40**: fewer trades, more
+money. A one-cent gap is noise in the estimate; a twenty-cent one is a view.
+
+**Lesson: a proxy that correlates will keep half-working, and keep needing
+revision.** The fix was not a better threshold on price but recording the
+variable the decision was actually made on.
 
 ## 12. Limitations
 
@@ -792,7 +833,10 @@ Stated plainly, because a paper that only lists strengths is not useful.
 6. **Server-side keys** are a real custody risk, mitigated but not eliminated.
 7. **Cost basis is incomplete for minted positions**, where shares were acquired
    by minting rather than buying; a subset of historical rows remain unpriced.
-8. **The platform fee is unimplemented.**
+8. **The strategies trade rarely by design.** Sampled across live windows the
+   model has no view 60% of the time: on five minute crypto the price sits near
+   the strike most of the time, which is the instrument rather than a setting.
+   Long quiet stretches are the filters working, not a fault.
 9. **Testnet only.** Liquidity, counterparties and faucet behaviour are not
    representative of a live market.
 
