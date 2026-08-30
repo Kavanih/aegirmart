@@ -201,8 +201,10 @@ export function Portfolio() {
       claimable: claimable.reduce((sum, p) => sum + sharesOf(p) * PAYOUT_PER_SHARE, 0),
       realised: settled.reduce((sum, p) => sum + (p.pnl ?? 0), 0),
       staked: rows.reduce((sum, p) => sum + (p.cost ?? 0), 0),
-      // What the settled book actually cost, as a positive figure. Realised P&L
-      // already nets this off against the wins; this is the losing half alone.
+      // The two halves shown separately, so the net can be checked by adding
+      // them. Showing only the net and the losses left the wins to be summed by
+      // hand from the table, and the difference read as an error.
+      won: settled.reduce((sum, p) => sum + Math.max(0, p.pnl ?? 0), 0),
       lost: settled.reduce((sum, p) => sum + Math.min(0, p.pnl ?? 0), 0) * -1,
     };
   }, [positions, claimed]);
@@ -276,8 +278,10 @@ export function Portfolio() {
           value={stats.settled ? `${Math.round(stats.winRate * 100)}%` : "--"}
           tone={stats.settled ? (stats.winRate >= 0.5 ? "good" : "bad") : undefined}
         />
+        <StatCard label="Won" value={`+${fmt(stats.won)}`} tone={stats.won > 0 ? "good" : undefined} />
+        <StatCard label="Lost" value={`-${fmt(stats.lost)}`} tone={stats.lost > 0 ? "bad" : undefined} />
         <StatCard
-          label="Realised P&L"
+          label="Net P&L"
           value={`${stats.realised >= 0 ? "+" : ""}${fmt(stats.realised)}`}
           tone={stats.realised >= 0 ? "good" : "bad"}
           note={
@@ -286,7 +290,6 @@ export function Portfolio() {
               : undefined
           }
         />
-        <StatCard label="Total loss" value={fmt(stats.lost)} tone={stats.lost > 0 ? "bad" : undefined} />
         <StatCard
           label="Unclaimed"
           value={fmt(stats.claimable)}

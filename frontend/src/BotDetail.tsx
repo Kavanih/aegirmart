@@ -79,11 +79,14 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
   const decided = inPeriod.filter((o) => o.won !== null);
   const orderPnl = decided.reduce((sum, o) => sum + (o.pnl ?? 0), 0);
   const wonCount = decided.filter((o) => o.won).length;
+  // Shown separately so the net can be reconciled on the page. Only the net and
+  // the losses were displayed, which left the wins to be added up by hand and
+  // the difference looking like an error.
+  const wonTotal = decided.filter((o) => o.won).reduce((sum, o) => sum + (o.pnl ?? 0), 0);
   const lostTotal = decided.filter((o) => !o.won).reduce((sum, o) => sum + Math.abs(o.pnl ?? 0), 0);
   const filledCount = inPeriod.filter((o) => o.status === "Filled").length;
   const restingCount = inPeriod.filter((o) => o.status === "Open").length;
   const expiredCount = inPeriod.filter((o) => o.status === "Expired").length;
-  const volume = inPeriod.reduce((sum, o) => sum + o.filled, 0);
 
   const capped = bot.dailyTrades > 0;
   const left = capped ? Math.max(0, bot.dailyTrades - bot.tradesToday) : null;
@@ -144,14 +147,19 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
           tone={decided.length ? (wonCount / decided.length >= 0.5 ? "good" : "bad") : undefined}
         />
         <Stat
-          label="Realised P&L"
-          value={decided.length ? `${orderPnl >= 0 ? "+" : ""}${orderPnl.toFixed(2)}` : "--"}
-          tone={decided.length ? (orderPnl >= 0 ? "good" : "bad") : undefined}
+          label="Won"
+          value={decided.length ? `+${wonTotal.toFixed(2)}` : "--"}
+          tone={wonTotal > 0 ? "good" : undefined}
         />
         <Stat
-          label="Total loss"
-          value={decided.length ? lostTotal.toFixed(2) : "--"}
+          label="Lost"
+          value={decided.length ? `-${lostTotal.toFixed(2)}` : "--"}
           tone={lostTotal > 0 ? "bad" : undefined}
+        />
+        <Stat
+          label="Net P&L"
+          value={decided.length ? `${orderPnl >= 0 ? "+" : ""}${orderPnl.toFixed(2)}` : "--"}
+          tone={decided.length ? (orderPnl >= 0 ? "good" : "bad") : undefined}
         />
         <Stat label="Settled" value={String(decided.length)} />
         <Stat label="Trades today" value={capped ? `${bot.tradesToday}/${bot.dailyTrades}` : String(bot.tradesToday)} />
@@ -183,7 +191,11 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
         <Stat label="Settled orders" value={decided.length ? `${wonCount}/${decided.length} won` : "--"} />
         <Stat label="Resting" value={String(restingCount)} />
         <Stat label="Expired" value={String(expiredCount)} />
-        <Stat label="Volume filled" value={volume.toFixed(2)} />
+        <Stat
+          label="Wallet"
+          value={funds.balance === null ? "--" : `${funds.balance.toFixed(2)}`}
+          tone={funds.balance !== null && funds.balance < bot.stake ? "bad" : undefined}
+        />
       </div>
 
       {/* Neither a win nor a loss, so it never reaches P&L. Unsaid, the money
