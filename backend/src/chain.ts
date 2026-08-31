@@ -66,6 +66,13 @@ export type Quote = {
    * fewer shares than the stake pays for and spent less than was asked.
    */
   sizeAt?: number;
+  /**
+   * Exact share count, overriding the stake.
+   *
+   * Completing a half-filled pair needs a specific number of shares - however
+   * many the other leg is short by - not a fixed amount of collateral.
+   */
+  shares?: number;
   /** Collateral to commit, in tUSDC. */
   stake: number;
   expiry: number;
@@ -94,7 +101,9 @@ export async function placeQuote(privateKey: string, q: Quote): Promise<PlacedQu
   const ownPrice = snap(q.price, TICK, "round");
   if (ownPrice <= 0n || ownPrice >= ONE) return { error: "price off the grid" };
 
-  const quantity = snap(q.stake / (q.sizeAt && q.sizeAt > 0 ? q.sizeAt : q.price), LOT, "floor");
+  const quantity = q.shares && q.shares > 0
+    ? snap(q.shares, LOT, "floor")
+    : snap(q.stake / (q.sizeAt && q.sizeAt > 0 ? q.sizeAt : q.price), LOT, "floor");
   if (quantity <= 0n) return { error: "stake too small for one lot" };
 
   const escrow = (ownPrice * quantity) / ONE;

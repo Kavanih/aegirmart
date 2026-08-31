@@ -5,7 +5,7 @@ import {
 import { buildEvidence } from "./quant.js";
 import { recordBotTrade } from "./stats.js";
 import { recordDecision } from "./decisions.js";
-import { positionsFor, ordersFor } from "./markets.js";
+import { positionsFor, ordersFor, type MarketBook } from "./markets.js";
 import { cachedPrediction } from "./tracker.js";
 import { placeQuote, redeemWin, collateralBalance } from "./chain.js";
 
@@ -253,6 +253,106 @@ function directionalLeg(fair: number, bestBid: number | null, bestAsk: number | 
 }
 
 /**
+ * Most a completed pair may cost before completing it is the worse option.
+ *
+ * A set of both legs always redeems at exactly 1.00, so buying the missing leg
+ * at a price that takes the pair past 1.00 locks in a certain loss. A little
+ * over is still worth paying - it buys certainty in place of a coin flip the
+ * bot never wanted - but only a little.
+ */
+const MAX_SET_COST = Number(process.env.MAX_SET_COST ?? 1.02);
+
+/**
+ * Complete a market maker's half-filled pairs.
+ *
+ * A maker quotes both sides meaning to earn the gap between them, which needs
+ * both to fill. On this venue they rarely do: over an hour, eight markets
+ * filled one leg only against two that filled both, and every one of those
+ * eight became a naked directional bet at a price chosen to attract the other
+ * side - the worst price to be holding. That run lost 266 in thirty minutes.
+ *
+ * Buying the missing leg turns the naked half into a complete set, which
+ * redeems at 1.00 whichever way the window goes. It gives up the upside of
+ * being accidentally right in exchange for never being accidentally wrong,
+ * which is the trade a maker should always take: its edge is the spread, not
+ * the direction.
+ */
+async function completePairs(
+  bot: Bot,
+  key: string,
+  markets: Market[],
+  books: Map<string, MarketBook>,
+): Promise<void> {
+  if (bot.kind !== "standard" || !bot.key) return;
+
+  let rows;
+  try {
+    rows = await positionsFor(bot.key.address, 200);
+  } catch {
+    return;
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const live = new Map(markets.filter((m) => m.expiry > now + 20).map((m) => [m.marketId, m]));
+
+  // Shares held per leg, per market.
+  const held = new Map<string, { yes: number; no: number }>();
+  for (const p of rows) {
+    if (p.finalized || !live.has(p.marketId) || p.size <= 0) continue;
+    const legs = held.get(p.marketId) ?? { yes: 0, no: 0 };
+    if (p.outcomeIndex === 0) legs.yes += p.size;
+    else legs.no += p.size;
+    held.set(p.marketId, legs);
+  }
+
+  for (const [marketId, legs] of held) {
+    const shortfall = Math.abs(legs.yes - legs.no);
+    if (shortfall < 1) continue;
+
+    const market = live.get(marketId)!;
+    const short: "yes" | "no" = legs.yes < legs.no ? "yes" : "no";
+    const book = books.get(marketId);
+    const bestBid = book?.bids[0]?.price ?? null;
+    const bestAsk = book?.asks[0]?.price ?? null;
+
+    // What the missing leg costs, in its own terms.
+    const offer = short === "yes" ? bestAsk : bestBid === null ? null : 1 - bestBid;
+    if (offer === null) continue;
+
+    // What the filled half already cost, approximated by the other leg's
+    // complement: a pair is only worth completing while the two together stay
+    // near 1.00.
+    const alreadyPaid = 1 - offer;
+    if (offer + alreadyPaid > MAX_SET_COST) continue;
+    if (offer >= 0.99) continue;
+
+    const result = await placeQuote(key, {
+      pool: market.poolAddress as `0x${string}`,
+      collateral: market.collateral as `0x${string}`,
+      side: short,
+      price: Math.min(0.98, offer + SLIPPAGE),
+      shares: shortfall,
+      stake: bot.stake,
+      expiry: market.expiry,
+      taking: true,
+    });
+
+    if ("error" in result) {
+      if (!/PostOnly|WouldCross/i.test(result.error)) {
+        log(`${bot.name} hedge ${market.asset}: ${result.error}`);
+      }
+      continue;
+    }
+
+    recordBotFill(bot.id, market.marketId);
+    log(
+      `${bot.name} completed ${market.asset} ${market.intervalSec}s pair: ` +
+        `+${result.shares.toFixed(2)} ${short} @${Math.round(result.price * 100)}c`,
+    );
+  }
+}
+
+/**
  * Turn a bot's settled wins back into collateral.
  *
  * A won position is outcome tokens, not money. Left alone the wallet balance
@@ -310,6 +410,10 @@ async function cycle(): Promise<void> {
   for (const bot of bots) {
     const key = openBotKey(bot.id);
     if (!key) continue;
+
+    // Square up any half-filled pair before quoting again, so a naked leg is
+    // never carried into a new window.
+    await completePairs(bot, key, markets, bookByMarket);
 
     // Markets this bot already has an order in, read from the venue rather than
     // from memory. The in-memory guard died with every restart, and this
