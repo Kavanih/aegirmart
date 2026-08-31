@@ -76,6 +76,21 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
   const cutoff = period === "all" ? 0 : Math.floor(Date.now() / 1000) - PERIODS[period].seconds;
   const inPeriod = orders.filter((o) => o.placedAt >= cutoff);
 
+  const isMaker = bot.kind === "standard";
+
+  // A maker holds both legs of a market on purpose, so scoring each leg as a
+  // separate bet is meaningless: one hedged pair shows as a win and a loss and
+  // pulls the rate to 50% however well it did. Markets, not legs, are the unit.
+  const byMarket = new Map<string, OrderRow[]>();
+  for (const o of inPeriod) {
+    if (o.won === null || o.filled <= 0) continue;
+    byMarket.set(o.marketId, [...(byMarket.get(o.marketId) ?? []), o]);
+  }
+  const pairs = [...byMarket.values()].filter((legs) => legs.length >= 2);
+  const nakedLegs = [...byMarket.values()].filter((legs) => legs.length === 1);
+  const pairedNet = pairs.flat().reduce((sum, o) => sum + (o.pnl ?? 0), 0);
+  const nakedNet = nakedLegs.flat().reduce((sum, o) => sum + (o.pnl ?? 0), 0);
+
   const decided = inPeriod.filter((o) => o.won !== null);
   const orderPnl = decided.reduce((sum, o) => sum + (o.pnl ?? 0), 0);
   const wonCount = decided.filter((o) => o.won).length;
@@ -141,21 +156,48 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
       </div>
 
       <div className="stat-grid">
-        <Stat
-          label="Win rate"
-          value={decided.length ? `${Math.round((wonCount / decided.length) * 100)}%` : "--"}
-          tone={decided.length ? (wonCount / decided.length >= 0.5 ? "good" : "bad") : undefined}
-        />
-        <Stat
-          label="Won"
-          value={decided.length ? `+${wonTotal.toFixed(2)}` : "--"}
-          tone={wonTotal > 0 ? "good" : undefined}
-        />
-        <Stat
-          label="Lost"
-          value={decided.length ? `-${lostTotal.toFixed(2)}` : "--"}
-          tone={lostTotal > 0 ? "bad" : undefined}
-        />
+        {isMaker ? (
+          <>
+            <Stat
+              label="Completed pairs"
+              value={String(pairs.length)}
+              tone={pairs.length > 0 ? "good" : undefined}
+            />
+            <Stat
+              label="From pairs"
+              value={pairs.length ? `${pairedNet >= 0 ? "+" : ""}${pairedNet.toFixed(2)}` : "--"}
+              tone={pairs.length ? (pairedNet >= 0 ? "good" : "bad") : undefined}
+            />
+            <Stat
+              label="Naked legs"
+              value={String(nakedLegs.length)}
+              tone={nakedLegs.length > 0 ? "bad" : undefined}
+            />
+            <Stat
+              label="From naked legs"
+              value={nakedLegs.length ? `${nakedNet >= 0 ? "+" : ""}${nakedNet.toFixed(2)}` : "--"}
+              tone={nakedLegs.length ? (nakedNet >= 0 ? "good" : "bad") : undefined}
+            />
+          </>
+        ) : (
+          <>
+            <Stat
+              label="Win rate"
+              value={decided.length ? `${Math.round((wonCount / decided.length) * 100)}%` : "--"}
+              tone={decided.length ? (wonCount / decided.length >= 0.5 ? "good" : "bad") : undefined}
+            />
+            <Stat
+              label="Won"
+              value={decided.length ? `+${wonTotal.toFixed(2)}` : "--"}
+              tone={wonTotal > 0 ? "good" : undefined}
+            />
+            <Stat
+              label="Lost"
+              value={decided.length ? `-${lostTotal.toFixed(2)}` : "--"}
+              tone={lostTotal > 0 ? "bad" : undefined}
+            />
+          </>
+        )}
         <Stat
           label="Net P&L"
           value={decided.length ? `${orderPnl >= 0 ? "+" : ""}${orderPnl.toFixed(2)}` : "--"}
@@ -187,7 +229,7 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
 
       <div className="stat-grid">
         <Stat label="Filled" value={String(filledCount)} tone={filledCount > 0 ? "good" : undefined} />
-        <Stat label="Settled orders" value={decided.length ? `${wonCount}/${decided.length} won` : "--"} />
+        {!isMaker && <Stat label="Settled orders" value={decided.length ? `${wonCount}/${decided.length} won` : "--"} />}
         <Stat label="Resting" value={String(restingCount)} />
         <Stat label="Expired" value={String(expiredCount)} />
         <Stat
@@ -305,6 +347,8 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
                   <td className="num">{o.quantity.toFixed(2)}</td>
                   <td className={`num ${o.filled === 0 ? "muted-cell" : ""}`}>{o.filled.toFixed(2)}</td>
                   <td className="num">
+                    {/* A maker's legs are halves of a hedge, so a per-leg
+                        result reads as a win or a loss that was never a bet. */}
                     {o.won === null ? (
                       <span className="muted-cell">--</span>
                     ) : (
@@ -319,6 +363,14 @@ export function BotDetail({ botId, onBack, onEdit }: Props) {
             </tbody>
           </table>
         </TableScroll>
+      )}
+
+      {isMaker && (
+        <p className="footnote">
+          A market maker holds both legs of a market on purpose, so a completed pair always redeems at 1.00 and shows
+          here as one win beside one loss. Judge it on pairs and naked legs above, not on the per-leg results below: a
+          naked leg is a fill whose other half never came, and those are where the losses are.
+        </p>
       )}
 
       <p className="footnote">

@@ -194,6 +194,14 @@ export function recordBotFill(id: string, marketId?: string): void {
   bot.tradesToday = bot.tradeDay === day ? bot.tradesToday + 1 : 1;
   bot.tradeDay = day;
 
+  // Stop at the cap rather than idling against it. A bot showing "running" at
+  // 40/40 is doing nothing but burning cycles, and reads as active when it is
+  // finished for the day. The counter resets at midnight UTC; the switch does
+  // not, so tomorrow is a deliberate restart.
+  if (bot.dailyTrades > 0 && bot.tradesToday >= bot.dailyTrades && bot.status === "running") {
+    bot.status = "paused";
+  }
+
   // Remembered so the owner's profile can drop what the bot did, which is the
   // only separation available when a bot signs with the owner's own wallet.
   if (marketId) {
