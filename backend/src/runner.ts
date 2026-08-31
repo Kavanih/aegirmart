@@ -286,10 +286,22 @@ async function completePairs(
   if (bot.kind !== "standard" || !bot.key) return;
 
   let rows;
+  let priced;
   try {
-    rows = await positionsFor(bot.key.address, 200);
+    [rows, priced] = await Promise.all([
+      positionsFor(bot.key.address, 200),
+      ordersFor(bot.key.address, 200),
+    ]);
   } catch {
     return;
+  }
+
+  // What the filled half actually cost, per market and leg, from the fills.
+  const paidFor = new Map<string, number>();
+  for (const o of priced) {
+    if (o.filled <= 0) continue;
+    const key = `${o.marketId}:${o.outcomeIndex}`;
+    paidFor.set(key, Math.max(paidFor.get(key) ?? 0, o.price));
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -319,12 +331,16 @@ async function completePairs(
     const offer = short === "yes" ? bestAsk : bestBid === null ? null : 1 - bestBid;
     if (offer === null) continue;
 
-    // What the filled half already cost, approximated by the other leg's
-    // complement: a pair is only worth completing while the two together stay
-    // near 1.00.
-    const alreadyPaid = 1 - offer;
-    if (offer + alreadyPaid > MAX_SET_COST) continue;
-    if (offer >= 0.99) continue;
+    // What the filled half ACTUALLY cost, read from its own fills.
+    //
+    // This was first written as `1 - offer`, derived from the very number it
+    // was being compared against, so the pair always summed to exactly 1.00
+    // and the ceiling could never fire. It paid 98c to complete a leg bought at
+    // 5c - a 103c pair that redeems at 100c - and spent 363 tUSDC doing it.
+    const heldLeg = short === "yes" ? 1 : 0;
+    const alreadyPaid = paidFor.get(`${marketId}:${heldLeg}`);
+    if (alreadyPaid === undefined) continue;
+    if (alreadyPaid + offer > MAX_SET_COST) continue;
 
     const result = await placeQuote(key, {
       pool: market.poolAddress as `0x${string}`,
