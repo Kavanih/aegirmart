@@ -1,4 +1,4 @@
-# aegirmart
+# 
 # AEGIRMART
 
 **Automated strategies for short-horizon event contracts on Somnia**
