@@ -3,8 +3,6 @@
 
 **Automated strategies for short-horizon event contracts on Somnia**
 
-*Working draft — last updated 2026-08-27. Written alongside the build; every
-number here is measured against the live venue unless marked otherwise.*
 
 ---
 
